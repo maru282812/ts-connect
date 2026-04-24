@@ -4,6 +4,7 @@ import { Button } from "@heroui/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "@/lib/auth/actions";
+import { APP_NAME } from "@/constants/appConstants";
 
 const navItems = [
   {
@@ -108,7 +109,7 @@ export function UserSidebar() {
   return (
     <aside className="w-60 min-h-screen bg-white border-r border-default-100 flex flex-col">
       <div className="p-4 border-b border-default-100">
-        <span className="text-lg font-bold text-primary">WorkMarket</span>
+        <span className="text-lg font-bold text-primary">{APP_NAME}</span>
       </div>
 
       <nav className="flex-1 p-3 space-y-1">

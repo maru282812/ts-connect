@@ -1,7 +1,8 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { OfficialPostForm } from "@/components/admin/OfficialPostForm";
 import { NewCasualPostForm } from "@/components/features/NewCasualPostForm";
+import { getAdminContext } from "@/lib/auth/helpers";
 import { createClient } from "@/lib/supabase/server";
 import type { Company, Post } from "@/types/database";
 
@@ -12,8 +13,10 @@ interface EditPostPageProps {
 export default async function EditPostPage({ params }: EditPostPageProps) {
   const { postId } = await params;
   const supabase = await createClient();
+  const { userId, isMasterAdmin } = await getAdminContext();
 
   const [{ data: post }, { data: companies }] = await Promise.all([
+    // RLS により ADMIN は所属会社の投稿のみ取得できる（他社→null→notFound）
     supabase.from("posts").select("*").eq("id", postId).single(),
     supabase.from("companies").select("*").order("name"),
   ]);
@@ -23,6 +26,11 @@ export default async function EditPostPage({ params }: EditPostPageProps) {
   }
 
   const p = post as Post;
+
+  // ADMIN は自分が投稿したもののみ編集可能
+  if (!isMasterAdmin && p.created_by_user_id !== userId) {
+    redirect("/company/posts");
+  }
 
   // 気軽投稿: NewCasualPostForm が独自レイアウトを持つため直接返す
   if (p.post_type === "CASUAL") {

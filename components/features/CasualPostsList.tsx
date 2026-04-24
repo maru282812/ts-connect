@@ -51,9 +51,9 @@ export function CasualPostsList({
         .eq("post_type", "CASUAL")
         .order("created_at", { ascending: false });
 
-      // userモードはPUBLISHEDのみ表示
+      // userモードはOPEN/IN_PROGRESSを表示（RLSポリシーと同期）
       if (mode === "user") {
-        query = query.eq("post_status", "PUBLISHED");
+        query = query.in("post_status", ["OPEN", "IN_PROGRESS"]);
       }
 
       if (search.trim()) {
@@ -92,6 +92,7 @@ export function CasualPostsList({
             ✓ {successMessage}
           </p>
           <button
+            type="button"
             onClick={() => setShowSuccess(false)}
             className="text-emerald-500 hover:text-emerald-700 text-xl leading-none ml-4"
             aria-label="閉じる"
@@ -118,6 +119,7 @@ export function CasualPostsList({
           }
         >
           {Array.from({ length: 6 }).map((_, i) => (
+            // eslint-disable-next-line react/no-array-index-key
             <div key={i} className="bg-white rounded-xl h-12 animate-pulse" />
           ))}
         </div>

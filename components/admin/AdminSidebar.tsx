@@ -4,6 +4,7 @@ import { Button } from "@heroui/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "@/lib/auth/actions";
+import { APP_NAME } from "@/constants/appConstants";
 
 const userNavItems = [
   {
@@ -209,7 +210,7 @@ export function AdminSidebar() {
   return (
     <aside className="w-64 min-h-screen bg-slate-800 flex flex-col flex-shrink-0">
       <div className="px-5 py-4 border-b border-slate-700">
-        <span className="text-lg font-bold text-white">WorkMarket</span>
+        <span className="text-lg font-bold text-white">{APP_NAME}</span>
         <span className="ml-2 text-xs text-slate-400">管理画面</span>
       </div>
 

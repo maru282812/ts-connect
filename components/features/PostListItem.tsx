@@ -1,6 +1,7 @@
 "use client";
 
 import { Chip } from "@heroui/react";
+import { useState } from "react";
 import type { ApplicationType, PostWithRelations } from "@/types/database";
 
 interface PostListItemProps {
@@ -23,6 +24,7 @@ export function PostListItem({
   const createdAt = new Date(post.created_at).toLocaleDateString("ja-JP");
   const companyName = post.companies?.name ?? "会社不明";
   const userName = post.users?.display_name ?? "匿名";
+  const [imgError, setImgError] = useState(false);
 
   return (
     <div
@@ -43,13 +45,14 @@ export function PostListItem({
         className="w-full overflow-hidden shrink-0"
         style={{ height: "80px" }}
       >
-        {post.thumbnail_url ? (
+        {post.thumbnail_url && !imgError ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={post.thumbnail_url}
             alt={post.title}
             className="w-full h-full object-cover"
             style={{ borderRadius: "12px 12px 0 0" }}
+            onError={() => setImgError(true)}
           />
         ) : (
           <div
@@ -72,8 +75,8 @@ export function PostListItem({
 
       {/* ── テキストエリア ──────────────────────────────── */}
       <div className="flex flex-col flex-1 p-3 overflow-hidden">
-        {/* 種別バッジ */}
-        <div className="mb-2">
+        {/* 種別・ステータスバッジ */}
+        <div className="flex items-center gap-1 mb-2 flex-wrap">
           <Chip
             size="sm"
             color={isOfficial ? "primary" : "success"}
@@ -83,6 +86,17 @@ export function PostListItem({
           >
             {isOfficial ? "公式" : "気軽"}
           </Chip>
+          {post.post_status === "IN_PROGRESS" && (
+            <Chip
+              size="sm"
+              color="warning"
+              variant="flat"
+              className="h-5"
+              style={{ fontSize: "11px", padding: "2px 6px" }}
+            >
+              対応中
+            </Chip>
+          )}
         </div>
 
         {/* タイトル */}
@@ -122,7 +136,17 @@ export function PostListItem({
               )}
             </>
           ) : (
-            <p style={{ fontSize: "12px", color: "#6b7280" }}>{createdAt}</p>
+            <>
+              {deadline && (
+                <p
+                  className="text-warning-600"
+                  style={{ fontSize: "12px", color: "#d97706" }}
+                >
+                  締切: {deadline}
+                </p>
+              )}
+              <p style={{ fontSize: "12px", color: "#6b7280" }}>{createdAt}</p>
+            </>
           )}
         </div>
 

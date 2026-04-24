@@ -11,9 +11,15 @@ import { PostTypeBadge } from "./PostTypeBadge";
 
 interface ArchiveClientProps {
   posts: PostWithRelations[];
+  currentUserId: string;
+  isMasterAdmin: boolean;
 }
 
-export function ArchiveClient({ posts }: ArchiveClientProps) {
+export function ArchiveClient({
+  posts,
+  currentUserId,
+  isMasterAdmin,
+}: ArchiveClientProps) {
   const router = useRouter();
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<PostType | "ALL">("ALL");
@@ -117,6 +123,7 @@ export function ArchiveClient({ posts }: ArchiveClientProps) {
         <div className="flex gap-1">
           {(["ALL", "OFFICIAL", "CASUAL"] as const).map((type) => (
             <button
+              type="button"
               key={type}
               onClick={() => setTypeFilter(type)}
               className={`px-3 py-2 text-xs rounded-lg font-medium transition-colors ${
@@ -172,67 +179,75 @@ export function ArchiveClient({ posts }: ArchiveClientProps) {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((post) => (
-                <tr
-                  key={post.id}
-                  className="border-b last:border-0 border-slate-100 hover:bg-slate-50 transition-colors"
-                >
-                  <td className="px-4 py-3">
-                    <PostThumbnail
-                      thumbnailUrl={
-                        (
-                          post as PostWithRelations & {
-                            thumbnail_url?: string | null;
-                          }
-                        ).thumbnail_url
-                      }
-                      title={post.title}
-                      type={post.post_type}
-                      size="sm"
-                    />
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className="font-medium text-default-700 line-clamp-2 max-w-xs">
-                      {post.title}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <PostTypeBadge type={post.post_type} />
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className="text-xs text-default-500">
-                      {post.companies?.name ?? "—"}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className="text-xs text-default-400">
-                      {post.closed_at
-                        ? new Date(post.closed_at).toLocaleDateString("ja-JP")
-                        : "—"}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <Link
-                        href={`/company/archive/${post.id}`}
-                        className="text-xs text-default-500 hover:text-default-800 hover:underline"
-                      >
-                        詳細
-                      </Link>
-                      <span className="text-slate-200">|</span>
-                      <Button
+              {filtered.map((post) => {
+                const canOperate =
+                  isMasterAdmin || post.created_by_user_id === currentUserId;
+                return (
+                  <tr
+                    key={post.id}
+                    className="border-b last:border-0 border-slate-100 hover:bg-slate-50 transition-colors"
+                  >
+                    <td className="px-4 py-3">
+                      <PostThumbnail
+                        thumbnailUrl={
+                          (
+                            post as PostWithRelations & {
+                              thumbnail_url?: string | null;
+                            }
+                          ).thumbnail_url
+                        }
+                        title={post.title}
+                        type={post.post_type}
                         size="sm"
-                        variant="flat"
-                        isLoading={duplicating === post.id}
-                        onPress={() => handleDuplicate(post)}
-                        className="text-xs h-7 px-3"
-                      >
-                        複製して再投稿
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                      />
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="font-medium text-default-700 line-clamp-2 max-w-xs">
+                        {post.title}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <PostTypeBadge type={post.post_type} />
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="text-xs text-default-500">
+                        {post.companies?.name ?? "—"}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="text-xs text-default-400">
+                        {post.closed_at
+                          ? new Date(post.closed_at).toLocaleDateString("ja-JP")
+                          : "—"}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <Link
+                          href={`/company/archive/${post.id}`}
+                          className="text-xs text-default-500 hover:text-default-800 hover:underline"
+                        >
+                          詳細
+                        </Link>
+                        {canOperate ? (
+                          <>
+                            <span className="text-slate-200">|</span>
+                            <Button
+                              size="sm"
+                              variant="flat"
+                              isLoading={duplicating === post.id}
+                              onPress={() => handleDuplicate(post)}
+                              className="text-xs h-7 px-3"
+                            >
+                              複製して再投稿
+                            </Button>
+                          </>
+                        ) : null}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}

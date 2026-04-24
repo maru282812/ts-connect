@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase/server";
 export default async function AdminApplicationsPage() {
   const supabase = await createClient();
 
+  // RLS が ADMIN=所属会社案件の応募のみ / MASTER_ADMIN=全件 を自動適用する
   const { data: applications, error } = await supabase
     .from("applications")
     .select(
@@ -27,7 +28,7 @@ export default async function AdminApplicationsPage() {
 
   return (
     <div>
-      <PageHeader title="応募管理" description="全ての応募・問い合わせ一覧" />
+      <PageHeader title="応募管理" description="応募・問い合わせ一覧" />
       <AdminApplicationsClient applications={rows} />
     </div>
   );

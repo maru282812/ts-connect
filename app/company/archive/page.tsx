@@ -1,9 +1,11 @@
 import { ArchiveClient } from "@/components/admin/ArchiveClient";
+import { getAdminContext } from "@/lib/auth/helpers";
 import { createClient } from "@/lib/supabase/server";
 import type { PostWithRelations } from "@/types/database";
 
 export default async function ArchivePage() {
   const supabase = await createClient();
+  const { userId, isMasterAdmin } = await getAdminContext();
 
   const { data: posts } = await supabase
     .from("posts")
@@ -15,5 +17,11 @@ export default async function ArchivePage() {
 
   const archivedPosts = (posts as PostWithRelations[]) ?? [];
 
-  return <ArchiveClient posts={archivedPosts} />;
+  return (
+    <ArchiveClient
+      posts={archivedPosts}
+      currentUserId={userId}
+      isMasterAdmin={isMasterAdmin}
+    />
+  );
 }

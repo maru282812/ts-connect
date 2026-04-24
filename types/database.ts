@@ -1,15 +1,10 @@
 // ============================================================
 // Enum Types
 // ============================================================
-export type SystemRole = "ADMIN" | "USER";
+export type SystemRole = "ADMIN" | "USER" | "MASTER_ADMIN";
 export type AccountStatus = "ACTIVE" | "PRO" | "SUSPENDED";
 export type PostType = "OFFICIAL" | "CASUAL";
-export type PostStatus =
-  | "DRAFT"
-  | "PUBLISHED"
-  | "OPEN"
-  | "IN_PROGRESS"
-  | "CLOSED";
+export type PostStatus = "DRAFT" | "OPEN" | "IN_PROGRESS" | "CLOSED";
 export type ApplicationType = "APPLY" | "INQUIRY";
 export type ApplicationStatus =
   | "APPLIED"
@@ -44,7 +39,8 @@ export interface CompanyMember {
   id: string;
   user_id: string;
   company_id: string;
-  membership_role: MembershipRole;
+  role: MembershipRole;
+  status: string;
   created_at: string;
   updated_at: string;
 }
@@ -66,6 +62,7 @@ export interface Post {
   application_limit: number | null;
   is_application_limit_enabled: boolean;
   thumbnail_url: string | null;
+  reference_url: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -114,6 +111,7 @@ export interface PostFormData {
   contact_person_name: string;
   deadline_at: string;
   thumbnail_url: string;
+  reference_url: string;
 }
 
 export interface ApplicationFormData {

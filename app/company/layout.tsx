@@ -17,19 +17,20 @@ export default async function CompanyLayout({
     redirect("/login");
   }
 
-  const systemRole = user.user_metadata?.system_role as string | undefined;
-  if (systemRole !== "ADMIN") {
-    redirect("/app/posts");
-  }
-
   const { data: profile } = await supabase
     .from("users")
-    .select("display_name")
+    .select("display_name, system_role")
     .eq("id", user.id)
     .single();
 
-  const displayName =
-    profile?.display_name ?? user.user_metadata?.display_name ?? "管理者";
+  if (
+    profile?.system_role !== "ADMIN" &&
+    profile?.system_role !== "MASTER_ADMIN"
+  ) {
+    redirect("/app/posts");
+  }
+
+  const displayName = profile.display_name ?? "管理者";
 
   return (
     <div className="min-h-screen bg-slate-100 flex">

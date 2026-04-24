@@ -1,4 +1,5 @@
 import type { ApplicationType, PostType } from "@/types/database";
+import { APP_NAME } from "@/constants/appConstants";
 
 export interface ApplicationEmailData {
   applicantName: string;
@@ -31,7 +32,7 @@ export function buildApplicationEmailSubject(
   postType: PostType = "OFFICIAL",
 ): string {
   const actionLabel = resolveActionLabel(applicationType, postType);
-  return `【${actionLabel}通知】${postTitle}`;
+  return `[${APP_NAME}] 【${actionLabel}通知】${postTitle}`;
 }
 
 export function buildApplicationEmailHtml(data: ApplicationEmailData): string {
@@ -74,6 +75,7 @@ export function buildApplicationEmailHtml(data: ApplicationEmailData): string {
 <body>
   <div class="container">
     <div class="header">
+      <p style="margin:0 0 4px; font-size:12px; opacity:0.8;">${APP_NAME}</p>
       <h2 style="margin:0;">新しい${actionLabel}が届きました</h2>
     </div>
     <div class="content">
@@ -130,7 +132,7 @@ export function buildApplicationEmailText(data: ApplicationEmailData): string {
   });
 
   return [
-    `【${actionLabel}通知】`,
+    `[${APP_NAME}] 【${actionLabel}通知】`,
     "",
     `案件: ${data.postTitle}`,
     `案件種別: ${postTypeLabel}`,

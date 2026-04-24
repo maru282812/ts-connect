@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { UserSidebar } from "@/components/user/UserSidebar";
 import { createClient } from "@/lib/supabase/server";
+import { APP_NAME } from "@/constants/appConstants";
 
 export default async function AppLayout({
   children,
@@ -23,8 +24,7 @@ export default async function AppLayout({
     .eq("id", user.id)
     .single();
 
-  const displayName =
-    profile?.display_name ?? user.user_metadata?.display_name ?? "ユーザー";
+  const displayName = profile?.display_name ?? "ユーザー";
 
   return (
     <div className="h-screen overflow-hidden bg-blue-50 flex">
@@ -33,7 +33,7 @@ export default async function AppLayout({
         {/* ヘッダー */}
         <header className="bg-white border-b border-default-100 px-6 py-3 flex items-center justify-between shrink-0 z-10">
           <div className="text-sm text-default-500">
-            <span className="font-medium text-default-700">WorkMarket</span>
+            <span className="font-medium text-default-700">{APP_NAME}</span>
           </div>
           <div className="flex items-center gap-3">
             <div className="text-right">

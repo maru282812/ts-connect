@@ -20,13 +20,13 @@ export async function middleware(request: NextRequest) {
             options: CookieOptions;
           }>,
         ) {
-          cookiesToSet.forEach(({ name, value }) =>
-            request.cookies.set(name, value),
-          );
+          cookiesToSet.forEach(({ name, value }) => {
+            request.cookies.set(name, value);
+          });
           supabaseResponse = NextResponse.next({ request });
-          cookiesToSet.forEach(({ name, value, options }) =>
-            supabaseResponse.cookies.set(name, value, options),
-          );
+          cookiesToSet.forEach(({ name, value, options }) => {
+            supabaseResponse.cookies.set(name, value, options);
+          });
         },
       },
     },
@@ -46,19 +46,32 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
-  // ログイン済みユーザーがログイン/サインアップページへアクセスした場合
-  if (user && (pathname === "/login" || pathname === "/signup")) {
-    const systemRole = user.user_metadata?.system_role as string | undefined;
-    if (systemRole === "ADMIN") {
-      return NextResponse.redirect(new URL("/company/posts", request.url));
-    }
-    return NextResponse.redirect(new URL("/app/posts", request.url));
-  }
+  // ログイン済みユーザーの system_role が必要なルートのみDBを参照する
+  if (
+    user &&
+    (pathname === "/login" ||
+      pathname === "/signup" ||
+      pathname.startsWith("/company"))
+  ) {
+    const { data: profile } = await supabase
+      .from("users")
+      .select("system_role")
+      .eq("id", user.id)
+      .single();
 
-  // /company/* は ADMIN のみアクセス可能
-  if (user && pathname.startsWith("/company")) {
-    const systemRole = user.user_metadata?.system_role as string | undefined;
-    if (systemRole !== "ADMIN") {
+    const isAdmin =
+      profile?.system_role === "ADMIN" ||
+      profile?.system_role === "MASTER_ADMIN";
+
+    // ログイン済みユーザーがログイン/サインアップページへアクセスした場合
+    if (pathname === "/login" || pathname === "/signup") {
+      return NextResponse.redirect(
+        new URL(isAdmin ? "/company/posts" : "/app/posts", request.url),
+      );
+    }
+
+    // /company/* は ADMIN / MASTER_ADMIN のみアクセス可能
+    if (!isAdmin) {
       return NextResponse.redirect(new URL("/app/posts", request.url));
     }
   }

@@ -1,10 +1,15 @@
 import type { Metadata } from "next";
 import { Providers } from "./providers";
 import "./globals.css";
+import { APP_NAME } from "@/constants/appConstants";
 
 export const metadata: Metadata = {
-  title: "WorkMarket - 仕事マッチングサービス",
-  description: "会社と個人をつなぐ仕事マッチングサービス",
+  title: APP_NAME,
+  description: `${APP_NAME}は会社と個人をつなぐ仕事マッチングサービスです`,
+  openGraph: {
+    title: APP_NAME,
+    siteName: APP_NAME,
+  },
 };
 
 export default function RootLayout({

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { sendMail } from "@/lib/mail";
+import { sendMail, type MailResult } from "@/lib/mail";
 import {
   buildApplicationEmailHtml,
   buildApplicationEmailSubject,
@@ -45,7 +45,7 @@ export async function POST(request: Request) {
       .from("posts")
       .select("*, companies(id, name), creator:created_by_user_id(email)")
       .eq("id", post_id)
-      .eq("post_status", "PUBLISHED")
+      .in("post_status", ["OPEN", "IN_PROGRESS"])
       .single();
 
     if (postError || !post) {
@@ -62,10 +62,18 @@ export async function POST(request: Request) {
       .eq("id", user.id)
       .single();
 
-    const applicantName =
-      userProfile?.display_name ?? user.user_metadata?.display_name ?? "不明";
+    // 所属会社取得（company_members 経由）
+    const { data: memberData } = await supabase
+      .from("company_members")
+      .select("companies(name)")
+      .eq("user_id", user.id)
+      .limit(1)
+      .maybeSingle();
+
+    const applicantName = userProfile?.display_name ?? "不明";
     const applicantEmail = user.email ?? "";
-    const applicantCompany = user.user_metadata?.company_name ?? null;
+    const applicantCompany =
+      (memberData?.companies as { name: string } | null)?.name ?? null;
 
     // 重複送信チェック（同一ユーザー × 同一投稿 × 同一タイプ）
     const { data: existing } = await supabase
@@ -169,7 +177,7 @@ export async function POST(request: Request) {
       applicationType: application_type,
     });
 
-    let mailResult;
+    let mailResult: MailResult | undefined;
     try {
       mailResult = await sendMail({
         to: notificationEmail,

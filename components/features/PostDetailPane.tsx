@@ -1,14 +1,23 @@
 "use client";
 
-import { Button, Chip } from "@heroui/react";
+import { Button, Chip, Divider } from "@heroui/react";
 import { useEffect, useState } from "react";
 import { ApplicationModal } from "@/components/common/ApplicationModal";
+import { isActiveStatus } from "@/lib/postStatus";
 import { createClient } from "@/lib/supabase/client";
 import type { ApplicationType, PostWithRelations } from "@/types/database";
 
 interface PostDetailPaneProps {
   post: PostWithRelations;
   onApplicationSuccess?: (postId: string, type: ApplicationType) => void;
+}
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <h2 className="text-xs font-bold text-default-400 uppercase tracking-wider mb-3">
+      {children}
+    </h2>
+  );
 }
 
 export function PostDetailPane({
@@ -22,17 +31,12 @@ export function PostDetailPane({
   );
 
   const isOfficial = post.post_type === "OFFICIAL";
+  const companyName = post.companies?.name ?? "会社不明";
+
   const deadline = post.deadline_at
     ? new Date(post.deadline_at).toLocaleDateString("ja-JP")
     : null;
-  const createdAt = new Date(post.created_at).toLocaleDateString("ja-JP");
-  const publishedAt = post.published_at
-    ? new Date(post.published_at).toLocaleDateString("ja-JP")
-    : null;
-  const userName = post.users?.display_name ?? "匿名";
-  const companyName = post.companies?.name ?? "会社不明";
 
-  // 応募済み状態を取得
   useEffect(() => {
     const fetchStatus = async () => {
       const supabase = createClient();
@@ -74,15 +78,15 @@ export function PostDetailPane({
   return (
     <div>
       <div className="bg-white rounded-xl border border-default-200 shadow-sm">
-        {/* ── 上部：固定ヘッダーエリア ── */}
+        {/* ── 基本情報（スティッキーヘッダー） ── */}
         <div className="sticky top-0 bg-white z-10 rounded-t-xl px-5 pt-5 pb-4 border-b border-default-100 shadow-[0_2px_6px_rgba(0,0,0,0.06)]">
-          {/* 成功メッセージ */}
           {successMessage && (
             <div className="mb-3 flex items-center justify-between bg-emerald-50 border border-emerald-200 rounded-lg px-4 py-2.5">
               <p className="text-sm text-emerald-700 font-medium">
                 ✓ {successMessage}
               </p>
               <button
+                type="button"
                 onClick={() => setSuccessMessage(null)}
                 className="text-emerald-500 hover:text-emerald-700 text-xl leading-none ml-4"
                 aria-label="閉じる"
@@ -92,7 +96,7 @@ export function PostDetailPane({
             </div>
           )}
 
-          {/* Type + status badges */}
+          {/* タイプ・ステータスバッジ */}
           <div className="flex items-center gap-2 flex-wrap mb-3">
             <Chip
               size="sm"
@@ -101,9 +105,13 @@ export function PostDetailPane({
             >
               {isOfficial ? "公式案件" : "気軽に投稿"}
             </Chip>
-            {post.post_status === "PUBLISHED" && (
-              <Chip size="sm" color="success" variant="flat">
-                公開中
+            {isActiveStatus(post.post_status) && (
+              <Chip
+                size="sm"
+                color={post.post_status === "OPEN" ? "primary" : "warning"}
+                variant="flat"
+              >
+                {post.post_status === "OPEN" ? "公開中" : "対応中"}
               </Chip>
             )}
             {post.post_status === "CLOSED" && (
@@ -113,29 +121,15 @@ export function PostDetailPane({
             )}
           </div>
 
-          {/* Title */}
-          <h1 className="text-xl font-bold text-default-900 leading-snug mb-2">
+          {/* タイトル */}
+          <h1 className="text-xl font-bold text-default-900 leading-snug mb-1">
             {post.title}
           </h1>
 
-          {/* Meta */}
-          <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-default-500 mb-3">
-            <span>{companyName}</span>
-            {isOfficial && post.price_text && (
-              <span className="font-semibold text-primary">
-                💰 {post.price_text}
-              </span>
-            )}
-            {isOfficial && post.contact_person_name && (
-              <span>担当: {post.contact_person_name}</span>
-            )}
-            {isOfficial && deadline && <span>締切: {deadline}</span>}
-            {isOfficial && publishedAt && <span>掲載日: {publishedAt}</span>}
-            {!isOfficial && <span>投稿者: {userName}</span>}
-            <span>投稿日: {createdAt}</span>
-          </div>
+          {/* 投稿会社 */}
+          <p className="text-sm text-default-500 mb-3">{companyName}</p>
 
-          {/* Action buttons */}
+          {/* アクションボタン */}
           <div className="flex gap-2 w-full">
             {appliedTypes.has("APPLY") ? (
               <Button
@@ -184,28 +178,90 @@ export function PostDetailPane({
           </div>
         </div>
 
-        {/* ── 下部：本文エリア ── */}
+        {/* ── 案件内容 ── */}
         <div className="px-5 py-6">
-          <h2 className="text-sm font-semibold text-default-600 mb-3">
-            {isOfficial ? "案件詳細" : "投稿内容"}
-          </h2>
+          <SectionLabel>{isOfficial ? "案件内容" : "投稿内容"}</SectionLabel>
           <div className="whitespace-pre-wrap text-default-700 leading-relaxed text-sm">
             {post.body}
           </div>
-
-          {isOfficial &&
-            post.application_limit &&
-            post.is_application_limit_enabled && (
-              <div className="mt-4 p-3 bg-default-50 rounded-lg">
-                <p className="text-xs text-default-500">
-                  募集人数:{" "}
-                  <span className="font-medium text-default-700">
-                    {post.application_limit}名
-                  </span>
-                </p>
-              </div>
-            )}
         </div>
+
+        {/* ── 募集条件（公式案件のみ） ── */}
+        {isOfficial && (
+          <>
+            <Divider />
+            <div className="px-5 py-6">
+              <SectionLabel>募集条件</SectionLabel>
+              <div className="whitespace-pre-wrap text-default-700 leading-relaxed text-sm">
+                {post.requirements ?? "未設定"}
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* ── 締切（気軽な投稿で設定されている場合） ── */}
+        {!isOfficial && deadline && (
+          <>
+            <Divider />
+            <div className="px-5 py-6">
+              <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-3 text-sm">
+                <dt className="text-default-400 font-medium">締切</dt>
+                <dd className="text-default-700">{deadline}</dd>
+              </dl>
+            </div>
+          </>
+        )}
+
+        {/* ── 補足情報（公式案件のみ） ── */}
+        {isOfficial && (
+          <>
+            <Divider />
+            <div className="px-5 py-6">
+              <SectionLabel>補足情報</SectionLabel>
+              <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-3 text-sm">
+                <dt className="text-default-400 font-medium">報酬</dt>
+                <dd className="text-default-700">
+                  {post.price_text ?? "応相談"}
+                </dd>
+
+                <dt className="text-default-400 font-medium">締切</dt>
+                <dd className="text-default-700">{deadline ?? "期限未設定"}</dd>
+
+                <dt className="text-default-400 font-medium">担当者</dt>
+                <dd className="text-default-700">
+                  {post.contact_person_name ?? "未設定"}
+                </dd>
+
+                {post.reference_url && (
+                  <>
+                    <dt className="text-default-400 font-medium">参考URL</dt>
+                    <dd className="text-default-700 break-all">
+                      <a
+                        href={post.reference_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary underline"
+                      >
+                        {post.reference_url}
+                      </a>
+                    </dd>
+                  </>
+                )}
+              </dl>
+
+              {post.application_limit && post.is_application_limit_enabled && (
+                <div className="mt-4 p-3 bg-default-50 rounded-lg">
+                  <p className="text-xs text-default-500">
+                    募集人数:{" "}
+                    <span className="font-medium text-default-700">
+                      {post.application_limit}名
+                    </span>
+                  </p>
+                </div>
+              )}
+            </div>
+          </>
+        )}
       </div>
 
       {modalType && (

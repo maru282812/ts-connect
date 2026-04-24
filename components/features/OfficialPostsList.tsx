@@ -29,12 +29,12 @@ export function OfficialPostsList({
           "*, companies(id, name), users:created_by_user_id(id, display_name, email)",
         )
         .eq("post_type", "OFFICIAL")
-        .eq("post_status", "PUBLISHED")
+        .in("post_status", ["OPEN", "IN_PROGRESS"])
         .order("created_at", { ascending: false });
 
       if (search.trim()) {
         query = query.or(
-          `title.ilike.%${search.trim()}%,body.ilike.%${search.trim()}%`,
+          `title.ilike.%${search.trim()}%,body.ilike.%${search.trim()}%,requirements.ilike.%${search.trim()}%`,
         );
       }
 
@@ -65,6 +65,7 @@ export function OfficialPostsList({
       {isLoading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {Array.from({ length: 6 }).map((_, i) => (
+            // eslint-disable-next-line react/no-array-index-key
             <div key={i} className="bg-white rounded-xl h-48 animate-pulse" />
           ))}
         </div>

@@ -3,7 +3,14 @@
 import { Button, Input, Select, SelectItem, Textarea } from "@heroui/react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { formLabelClasses } from "@/components/common/FormField";
+import {
+  formInputClasses,
+  formSelectClasses,
+  formTextareaClasses,
+} from "@/components/common/FormField";
+import { ThumbnailInput } from "@/components/common/ThumbnailInput";
+import { FormField } from "@/components/ui/FormField";
+import { isPublicStatus, POST_STATUSES } from "@/lib/postStatus";
 import { createClient } from "@/lib/supabase/client";
 import type { Company, Post, PostStatus } from "@/types/database";
 
@@ -13,30 +20,13 @@ interface OfficialPostFormProps {
   defaultCompanyId?: string;
 }
 
-const POST_STATUSES: { value: PostStatus; label: string }[] = [
-  { value: "DRAFT", label: "下書き" },
-  { value: "OPEN", label: "公開中" },
-  { value: "IN_PROGRESS", label: "対応中" },
-  { value: "CLOSED", label: "終了" },
-];
-
-const inputClasses = {
-  ...formLabelClasses,
-  inputWrapper: "border-slate-300 hover:border-slate-400 bg-white h-12",
-  input: "text-base",
-};
-
-const textareaClasses = {
-  ...formLabelClasses,
-  inputWrapper: "border-slate-300 hover:border-slate-400 bg-white",
-  input: "text-base leading-relaxed py-2",
-};
-
-const selectClasses = {
-  ...formLabelClasses,
-  trigger: "border-slate-300 hover:border-slate-400 bg-white h-12",
-  value: "text-base",
-};
+function SectionHeading({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="border-l-4 border-blue-800 pl-3 mb-1">
+      <p className="text-sm font-semibold text-slate-700">{children}</p>
+    </div>
+  );
+}
 
 export function OfficialPostForm({
   post,
@@ -63,6 +53,7 @@ export function OfficialPostForm({
     post?.company_id ?? defaultCompanyId ?? "",
   );
   const [thumbnailUrl, setThumbnailUrl] = useState(post?.thumbnail_url ?? "");
+  const [referenceUrl, setReferenceUrl] = useState(post?.reference_url ?? "");
   const [postStatus, setPostStatus] = useState<PostStatus>(
     post?.post_status ?? "DRAFT",
   );
@@ -71,6 +62,12 @@ export function OfficialPostForm({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!requirements.trim()) {
+      setError("募集条件は必須項目です");
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
 
@@ -87,7 +84,7 @@ export function OfficialPostForm({
     const payload = {
       title,
       body,
-      requirements: requirements || null,
+      requirements,
       post_type: "OFFICIAL" as const,
       post_status: postStatus,
       company_id: companyId,
@@ -98,23 +95,21 @@ export function OfficialPostForm({
         : null,
       deadline_at: deadlineAt ? new Date(deadlineAt).toISOString() : null,
       thumbnail_url: thumbnailUrl || null,
-      published_at:
-        postStatus === "OPEN" || postStatus === "IN_PROGRESS"
-          ? new Date().toISOString()
-          : null,
+      reference_url: referenceUrl || null,
+      published_at: isPublicStatus(postStatus)
+        ? new Date().toISOString()
+        : null,
       closed_at: postStatus === "CLOSED" ? new Date().toISOString() : null,
       updated_at: new Date().toISOString(),
     };
 
-    let result;
-    if (isEdit && post) {
-      result = await supabase.from("posts").update(payload).eq("id", post.id);
-    } else {
-      result = await supabase.from("posts").insert({
-        ...payload,
-        created_by_user_id: user.id,
-      });
-    }
+    const result =
+      isEdit && post
+        ? await supabase.from("posts").update(payload).eq("id", post.id)
+        : await supabase.from("posts").insert({
+            ...payload,
+            created_by_user_id: user.id,
+          });
 
     setIsLoading(false);
 
@@ -128,148 +123,170 @@ export function OfficialPostForm({
   };
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-6">
+    <form onSubmit={handleSubmit} className="flex flex-col gap-8">
       {error && (
         <p className="text-danger text-sm bg-danger-50 rounded-lg p-3">
           {error}
         </p>
       )}
 
-      {/* タイトル */}
-      <Input
-        label="タイトル"
-        labelPlacement="outside"
-        value={title}
-        onValueChange={setTitle}
-        isRequired
-        placeholder="案件タイトルを入力"
-        variant="bordered"
-        size="lg"
-        classNames={inputClasses}
-      />
+      {/* ── 基本情報 ── */}
+      <div className="flex flex-col gap-5">
+        <SectionHeading>基本情報</SectionHeading>
 
-      {/* 詳細説明 */}
-      <Textarea
-        label="詳細説明"
-        labelPlacement="outside"
-        value={body}
-        onValueChange={setBody}
-        isRequired
-        placeholder="案件の詳細を入力してください"
-        minRows={6}
-        variant="bordered"
-        classNames={textareaClasses}
-      />
+        <FormField label="タイトル" required>
+          <Input
+            value={title}
+            onValueChange={setTitle}
+            isRequired
+            placeholder="案件タイトルを入力"
+            variant="bordered"
+            size="lg"
+            classNames={formInputClasses}
+          />
+        </FormField>
 
-      {/* 募集条件 */}
-      <Textarea
-        label="募集条件"
-        labelPlacement="outside"
-        value={requirements}
-        onValueChange={setRequirements}
-        placeholder="応募に必要なスキル・条件を入力してください"
-        minRows={4}
-        variant="bordered"
-        classNames={textareaClasses}
-      />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+          <FormField label="投稿会社" required>
+            <Select
+              selectedKeys={companyId ? [companyId] : []}
+              onSelectionChange={(keys) =>
+                setCompanyId(Array.from(keys)[0] as string)
+              }
+              isRequired
+              variant="bordered"
+              classNames={formSelectClasses}
+            >
+              {companies.map((c) => (
+                <SelectItem key={c.id}>{c.name}</SelectItem>
+              ))}
+            </Select>
+          </FormField>
 
-      {/* 報酬 / 募集人数 */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-        <Input
-          label="報酬"
-          labelPlacement="outside"
-          value={priceText}
-          onValueChange={setPriceText}
-          placeholder="例: 50,000円/件"
-          variant="bordered"
-          size="lg"
-          classNames={inputClasses}
-        />
-        <Input
-          label="募集人数"
-          labelPlacement="outside"
-          type="number"
-          value={applicationLimit}
-          onValueChange={setApplicationLimit}
-          placeholder="例: 3"
-          min={1}
-          variant="bordered"
-          size="lg"
-          classNames={inputClasses}
-        />
+          <FormField label="ステータス">
+            <Select
+              selectedKeys={[postStatus]}
+              onSelectionChange={(keys) =>
+                setPostStatus(Array.from(keys)[0] as PostStatus)
+              }
+              variant="bordered"
+              classNames={formSelectClasses}
+            >
+              {POST_STATUSES.map((s) => (
+                <SelectItem key={s.value}>{s.label}</SelectItem>
+              ))}
+            </Select>
+          </FormField>
+        </div>
+
+        <FormField label="サムネイル画像">
+          <ThumbnailInput
+            value={thumbnailUrl}
+            onChange={setThumbnailUrl}
+            onError={setError}
+          />
+        </FormField>
       </div>
 
-      {/* 締切日 / 担当者 */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-        <Input
-          label="締切日"
-          labelPlacement="outside"
-          type="datetime-local"
-          value={deadlineAt}
-          onValueChange={setDeadlineAt}
-          variant="bordered"
-          size="lg"
-          classNames={inputClasses}
-        />
-        <Input
-          label="担当者"
-          labelPlacement="outside"
-          value={contactPersonName}
-          onValueChange={setContactPersonName}
-          placeholder="例: 山田 太郎"
-          variant="bordered"
-          size="lg"
-          classNames={inputClasses}
-        />
+      {/* ── 案件内容 ── */}
+      <div className="flex flex-col gap-5">
+        <SectionHeading>案件内容</SectionHeading>
+
+        <FormField label="案件内容" required>
+          <Textarea
+            value={body}
+            onValueChange={setBody}
+            isRequired
+            placeholder="案件の詳細を入力してください"
+            minRows={6}
+            variant="bordered"
+            classNames={formTextareaClasses}
+          />
+        </FormField>
       </div>
 
-      {/* 所属会社 / ステータス */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-        <Select
-          label="所属会社"
-          labelPlacement="outside"
-          selectedKeys={companyId ? [companyId] : []}
-          onSelectionChange={(keys) =>
-            setCompanyId(Array.from(keys)[0] as string)
-          }
-          isRequired
-          variant="bordered"
-          classNames={selectClasses}
-        >
-          {companies.map((c) => (
-            <SelectItem key={c.id}>{c.name}</SelectItem>
-          ))}
-        </Select>
+      {/* ── 募集条件 ── */}
+      <div className="flex flex-col gap-5">
+        <SectionHeading>募集条件</SectionHeading>
 
-        <Select
-          label="ステータス"
-          labelPlacement="outside"
-          selectedKeys={[postStatus]}
-          onSelectionChange={(keys) =>
-            setPostStatus(Array.from(keys)[0] as PostStatus)
-          }
-          variant="bordered"
-          classNames={selectClasses}
-        >
-          {POST_STATUSES.map((s) => (
-            <SelectItem key={s.value}>{s.label}</SelectItem>
-          ))}
-        </Select>
+        <FormField label="募集条件" required>
+          <Textarea
+            value={requirements}
+            onValueChange={setRequirements}
+            isRequired
+            placeholder="応募に必要なスキル・条件を入力してください"
+            minRows={4}
+            variant="bordered"
+            classNames={formTextareaClasses}
+          />
+        </FormField>
       </div>
 
-      {/* サムネイル画像URL（任意） */}
-      <Input
-        label="サムネイル画像URL（任意）"
-        labelPlacement="outside"
-        value={thumbnailUrl}
-        onValueChange={setThumbnailUrl}
-        placeholder="https://..."
-        variant="bordered"
-        size="lg"
-        classNames={inputClasses}
-      />
+      {/* ── 補足情報 ── */}
+      <div className="flex flex-col gap-5">
+        <SectionHeading>補足情報</SectionHeading>
 
-      <div className="flex gap-3 pt-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+          <FormField label="報酬（任意）">
+            <Input
+              value={priceText}
+              onValueChange={setPriceText}
+              placeholder="例: 50,000円/件"
+              variant="bordered"
+              size="lg"
+              classNames={formInputClasses}
+            />
+          </FormField>
+          <FormField label="募集人数（任意）">
+            <Input
+              type="number"
+              value={applicationLimit}
+              onValueChange={setApplicationLimit}
+              placeholder="例: 3"
+              min={1}
+              variant="bordered"
+              size="lg"
+              classNames={formInputClasses}
+            />
+          </FormField>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+          <FormField label="締切日（任意）">
+            <Input
+              type="datetime-local"
+              value={deadlineAt}
+              onValueChange={setDeadlineAt}
+              variant="bordered"
+              size="lg"
+              classNames={formInputClasses}
+            />
+          </FormField>
+          <FormField label="担当者（任意）">
+            <Input
+              value={contactPersonName}
+              onValueChange={setContactPersonName}
+              placeholder="例: 山田 太郎"
+              variant="bordered"
+              size="lg"
+              classNames={formInputClasses}
+            />
+          </FormField>
+        </div>
+
+        <FormField label="参考URL（任意）">
+          <Input
+            value={referenceUrl}
+            onValueChange={setReferenceUrl}
+            placeholder="https://..."
+            variant="bordered"
+            size="lg"
+            classNames={formInputClasses}
+          />
+        </FormField>
+      </div>
+
+      <div className="flex gap-3 pt-2">
         <Button
           type="button"
           variant="flat"

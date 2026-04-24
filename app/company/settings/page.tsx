@@ -9,15 +9,13 @@ import {
   Input,
 } from "@heroui/react";
 import { useEffect, useState } from "react";
-import { formLabelClasses } from "@/components/common/FormField";
+import {
+  formInputClasses,
+  formInputReadonlyClasses,
+} from "@/components/common/FormField";
 import { PageHeader } from "@/components/common/PageHeader";
+import { FormField } from "@/components/ui/FormField";
 import { createClient } from "@/lib/supabase/client";
-
-const inputClasses = {
-  ...formLabelClasses,
-  inputWrapper: "border-slate-300 hover:border-slate-400 bg-white h-12",
-  input: "text-base",
-};
 
 export default function AdminSettingsPage() {
   const [displayName, setDisplayName] = useState("");
@@ -37,7 +35,13 @@ export default function AdminSettingsPage() {
       } = await supabase.auth.getUser();
       if (!user) return;
       setEmail(user.email ?? "");
-      setDisplayName(user.user_metadata?.display_name ?? "");
+
+      const { data: profile } = await supabase
+        .from("users")
+        .select("display_name")
+        .eq("id", user.id)
+        .single();
+      setDisplayName(profile?.display_name ?? "");
     };
     load();
   }, []);
@@ -101,30 +105,29 @@ export default function AdminSettingsPage() {
                   {error}
                 </p>
               )}
-              <Input
-                label="管理者名"
-                labelPlacement="outside"
-                value={displayName}
-                onValueChange={setDisplayName}
-                isRequired
-                placeholder="管理者 太郎"
-                variant="bordered"
-                size="lg"
-                classNames={inputClasses}
-              />
-              <Input
+              <FormField label="管理者名" required>
+                <Input
+                  value={displayName}
+                  onValueChange={setDisplayName}
+                  isRequired
+                  placeholder="管理者 太郎"
+                  variant="bordered"
+                  size="lg"
+                  classNames={formInputClasses}
+                />
+              </FormField>
+              <FormField
                 label="メールアドレス"
-                labelPlacement="outside"
-                value={email}
-                isReadOnly
-                variant="bordered"
-                size="lg"
                 description="メールアドレスの変更はシステム管理者にお問い合わせください"
-                classNames={{
-                  ...inputClasses,
-                  inputWrapper: "border-slate-200 bg-slate-50 h-12",
-                }}
-              />
+              >
+                <Input
+                  value={email}
+                  isReadOnly
+                  variant="bordered"
+                  size="lg"
+                  classNames={formInputReadonlyClasses}
+                />
+              </FormField>
               <div className="flex justify-end pt-2">
                 <Button
                   type="submit"
@@ -146,19 +149,16 @@ export default function AdminSettingsPage() {
           </CardHeader>
           <Divider />
           <CardBody className="px-6 py-6 flex flex-col gap-4">
-            <Input
-              label="管理者通知先メールアドレス"
-              labelPlacement="outside"
-              value={notificationEmail}
-              onValueChange={setNotificationEmail}
-              variant="bordered"
-              size="lg"
-              isReadOnly
-              classNames={{
-                ...inputClasses,
-                inputWrapper: "border-slate-200 bg-slate-50 h-12",
-              }}
-            />
+            <FormField label="管理者通知先メールアドレス">
+              <Input
+                value={notificationEmail}
+                onValueChange={setNotificationEmail}
+                variant="bordered"
+                size="lg"
+                isReadOnly
+                classNames={formInputReadonlyClasses}
+              />
+            </FormField>
             <p className="text-xs text-slate-400 leading-relaxed">
               応募・問い合わせ通知の送信先です。環境変数{" "}
               <code className="bg-slate-100 px-1 py-0.5 rounded text-slate-600">

@@ -113,7 +113,7 @@ export function PostsPageClient({
         .select(
           "*, companies(id, name), users:created_by_user_id(id, display_name, email)",
         )
-        .eq("post_status", "PUBLISHED")
+        .in("post_status", ["OPEN", "IN_PROGRESS"])
         .order("created_at", { ascending: false });
 
       if (tab !== "ALL") {
@@ -121,7 +121,7 @@ export function PostsPageClient({
       }
       if (search.trim()) {
         query = query.or(
-          `title.ilike.%${search.trim()}%,body.ilike.%${search.trim()}%`,
+          `title.ilike.%${search.trim()}%,body.ilike.%${search.trim()}%,requirements.ilike.%${search.trim()}%`,
         );
       }
 
@@ -195,7 +195,6 @@ export function PostsPageClient({
           "*, companies(id, name), users:created_by_user_id(id, display_name, email)",
         )
         .eq("id", selectedPostId)
-        .eq("post_status", "PUBLISHED")
         .single();
       setSelectedPost((data as PostWithRelations) ?? null);
     };
@@ -271,6 +270,7 @@ export function PostsPageClient({
             <div className="flex flex-col gap-1">
               {TABS.map((t) => (
                 <button
+                  type="button"
                   key={t.key}
                   onClick={() => handleTabChange(t.key)}
                   className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium text-left transition-all ${
@@ -349,6 +349,7 @@ export function PostsPageClient({
           <div className="flex gap-1 border-b border-default-100">
             {TABS.map((t) => (
               <button
+                type="button"
                 key={t.key}
                 onClick={() => handleTabChange(t.key)}
                 className={`px-3 py-1.5 text-xs font-medium border-b-2 transition-colors ${
@@ -368,6 +369,7 @@ export function PostsPageClient({
           {isLoading ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {Array.from({ length: 6 }).map((_, i) => (
+                // eslint-disable-next-line react/no-array-index-key
                 <div
                   key={i}
                   className="bg-white rounded-xl animate-pulse border border-default-100"

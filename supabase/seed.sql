@@ -53,20 +53,20 @@ begin
   update public.users set system_role = 'ADMIN' where id = v_admin_id;
 
   -- company_members に紐付け
-  insert into public.company_members (user_id, company_id, membership_role)
-  values (v_admin_id, v_company1, 'ADMIN')
+  insert into public.company_members (user_id, company_id, role, status)
+  values (v_admin_id, v_company1, 'ADMIN', 'active')
   on conflict (user_id, company_id) do nothing;
 
   if v_user1_id is not null then
-    insert into public.company_members (user_id, company_id, membership_role)
-    values (v_user1_id, v_company2, 'USER')
+    insert into public.company_members (user_id, company_id, role, status)
+    values (v_user1_id, v_company2, 'USER', 'active')
     on conflict (user_id, company_id) do nothing;
   end if;
 
-  -- 公式案件: PUBLISHED
+  -- 公式案件: OPEN
   insert into public.posts
     (company_id, created_by_user_id, title, body, post_type, post_status,
-     price_text, contact_person_name, deadline_at, published_at)
+     price_text, contact_person_name, deadline_at, published_at, requirements)
   values
     (
       v_company1, v_admin_id,
@@ -77,24 +77,17 @@ begin
 - Supabase / PostgreSQL を使ったバックエンド連携
 - チームメンバーとのアジャイル開発
 
-■ 求めるスキル
-- React / TypeScript の実務経験 2 年以上
-- REST API / GraphQL の設計・実装経験
-- Git を使ったチーム開発経験
-
-■ 歓迎スキル
-- Next.js App Router の経験
-- CI/CD パイプラインの構築経験
-- デザインシステム / Tailwind CSS の経験
-
 ■ 働き方
 - リモートワーク可（週 1 回程度の出社あり）
 - フルタイム / パートタイム応相談',
-      'OFFICIAL', 'PUBLISHED',
+      'OFFICIAL', 'OPEN',
       '600,000〜900,000円/月',
       '山田 花子',
       now() + interval '30 days',
-      now()
+      now(),
+      '- React / TypeScript の実務経験 2 年以上
+- REST API / GraphQL の設計・実装経験
+- Git を使ったチーム開発経験'
     ),
     (
       v_company1, v_admin_id,
@@ -106,19 +99,17 @@ begin
 - Figma を使ったUIデザイン
 - デザインシステムの構築
 
-■ 求めるスキル
-- Figma の操作に慣れていること
-- ユーザビリティを考慮したデザイン経験
-- Web / モバイルアプリのデザイン経験
-
 ■ 条件
 - 業務委託
 - 週 20〜40 時間（応相談）',
-      'OFFICIAL', 'PUBLISHED',
+      'OFFICIAL', 'OPEN',
       '5,000円/時間',
       '鈴木 一郎',
       now() + interval '14 days',
-      now()
+      now(),
+      '- Figma の操作に慣れていること
+- ユーザビリティを考慮したデザイン経験
+- Web / モバイルアプリのデザイン経験'
     ),
     (
       v_company2, v_admin_id,
@@ -128,17 +119,13 @@ begin
 ■ 業務内容
 - LP（ランディングページ）のコピー作成
 - SNS 広告テキストの作成
-- A/B テスト用バリエーション作成
-
-■ 求めるスキル
-- Webマーケティングの知識
-- 実績に基づくコピーライティング経験
-- 数値（CTR、CVR）を意識した文章作成力',
-      'OFFICIAL', 'PUBLISHED',
+- A/B テスト用バリエーション作成',
+      'OFFICIAL', 'OPEN',
       '3,000〜5,000円/件',
       '佐藤 美奈',
       now() + interval '60 days',
-      now()
+      now(),
+      null
     );
 
   -- 公式案件: CLOSED（過去案件）
@@ -169,7 +156,7 @@ begin
         '個人で制作しているポートフォリオサイトについて、デザインのフィードバックをもらいたいと考えています。
 プロのデザイナーさんや経験豊富な方にご意見いただければ幸いです。
 完全にカジュアルな相談ですので、気軽にコメントください。',
-        'CASUAL', 'PUBLISHED', now()
+        'CASUAL', 'OPEN', now()
       ),
       (
         v_company2, v_user1_id,
@@ -178,7 +165,7 @@ begin
 一緒に勉強会やもくもく会をやれる方を探しています。
 週 1 回くらいのペースでオンライン開催を考えています。
 興味ある方は問い合わせください！',
-        'CASUAL', 'PUBLISHED', now()
+        'CASUAL', 'OPEN', now()
       );
   end if;
 end $$;

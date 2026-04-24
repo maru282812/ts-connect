@@ -27,7 +27,7 @@ export default function PostDetailPage() {
           "*, companies(id, name), users:created_by_user_id(id, display_name, email)",
         )
         .eq("id", id)
-        .eq("post_status", "PUBLISHED")
+        .in("post_status", ["OPEN", "IN_PROGRESS"])
         .single();
       setPost(data as PostWithRelations | null);
       setIsLoading(false);

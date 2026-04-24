@@ -13,6 +13,11 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { PostStatus, PostType } from "@/types/database";
+import {
+  POST_STATUS_LABELS,
+  POST_STATUSES,
+  isPublicStatus,
+} from "@/lib/postStatus";
 import { PostStatusBadge } from "./PostStatusBadge";
 import { PostThumbnail } from "./PostThumbnail";
 import { PostTypeBadge } from "./PostTypeBadge";
@@ -25,6 +30,7 @@ export interface PostRow {
   thumbnail_url: string | null;
   application_count: number;
   updated_at: string;
+  created_by_user_id: string;
 }
 
 type TabKey = "all" | "official" | "casual" | "in_progress" | "draft";
@@ -37,26 +43,7 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: "draft", label: "下書き" },
 ];
 
-const STATUS_LABELS: Record<PostStatus, string> = {
-  DRAFT: "下書き",
-  OPEN: "公開中",
-  PUBLISHED: "公開中",
-  IN_PROGRESS: "対応中",
-  CLOSED: "終了",
-};
 
-const CHANGE_STATUSES: { value: PostStatus; label: string }[] = [
-  { value: "DRAFT", label: "下書き" },
-  { value: "OPEN", label: "公開中" },
-  { value: "IN_PROGRESS", label: "対応中" },
-  { value: "CLOSED", label: "終了" },
-];
-
-function _isActiveStatus(s: PostStatus): boolean {
-  return (
-    s === "DRAFT" || s === "OPEN" || s === "IN_PROGRESS" || s === "PUBLISHED"
-  );
-}
 
 interface StatusChangerProps {
   postId: string;
@@ -78,7 +65,7 @@ function StatusChanger({
         post_status: status,
         updated_at: new Date().toISOString(),
       };
-      if (status === "OPEN" || status === "IN_PROGRESS") {
+      if (isPublicStatus(status)) {
         update.published_at = new Date().toISOString();
       }
       if (status === "CLOSED") {
@@ -93,14 +80,15 @@ function StatusChanger({
     <Dropdown>
       <DropdownTrigger>
         <button
+          type="button"
           disabled={isPending}
           className="text-xs text-slate-500 hover:text-slate-800 underline underline-offset-2 transition-colors disabled:opacity-50"
         >
-          {isPending ? "変更中..." : STATUS_LABELS[currentStatus]}
+          {isPending ? "変更中..." : POST_STATUS_LABELS[currentStatus]}
         </button>
       </DropdownTrigger>
       <DropdownMenu aria-label="ステータス変更">
-        {CHANGE_STATUSES.map((s) => (
+        {POST_STATUSES.map((s) => (
           <DropdownItem
             key={s.value}
             onPress={() => handleChange(s.value)}
@@ -116,10 +104,14 @@ function StatusChanger({
 
 interface PostsManagementClientProps {
   posts: PostRow[];
+  currentUserId: string;
+  isMasterAdmin: boolean;
 }
 
 export function PostsManagementClient({
   posts: initialPosts,
+  currentUserId,
+  isMasterAdmin,
 }: PostsManagementClientProps) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabKey>("all");
@@ -155,8 +147,6 @@ export function PostsManagementClient({
     router.refresh();
   };
 
-  // 公式案件モードのアクセント色
-  const _officialAccent = isOfficialMode ? "bg-blue-900" : "bg-slate-100";
   const tabActiveClass = isOfficialMode
     ? "border-blue-400 text-blue-200 font-semibold"
     : "border-primary text-primary font-semibold";
@@ -248,6 +238,7 @@ export function PostsManagementClient({
             return (
               <button
                 key={tab.key}
+                type="button"
                 onClick={() => setActiveTab(tab.key)}
                 className={`px-4 py-2.5 text-sm border-b-2 transition-colors ${
                   isActive
@@ -297,72 +288,87 @@ export function PostsManagementClient({
                 </tr>
               </thead>
               <tbody>
-                {filteredPosts.map((post) => (
-                  <tr
-                    key={post.id}
-                    className={`border-b last:border-0 hover:bg-slate-50 transition-colors ${
-                      isOfficialMode && post.post_type === "OFFICIAL"
-                        ? "border-blue-50"
-                        : "border-slate-100"
-                    }`}
-                  >
-                    <td className="px-4 py-3">
-                      <PostThumbnail
-                        thumbnailUrl={post.thumbnail_url}
-                        title={post.title}
-                        type={post.post_type}
-                        size="sm"
-                      />
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="font-medium text-default-800 line-clamp-2 max-w-xs">
-                        {post.title}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <PostTypeBadge type={post.post_type} />
-                    </td>
-                    <td className="px-4 py-3">
-                      <PostStatusBadge status={post.post_status} />
-                    </td>
-                    <td className="px-4 py-3">
-                      <Link
-                        href={`/company/applications?postId=${post.id}`}
-                        className="text-sm font-medium text-primary hover:underline"
-                      >
-                        {post.application_count}件
-                      </Link>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="text-xs text-default-400">
-                        {new Date(post.updated_at).toLocaleDateString("ja-JP")}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-3">
-                        <Link
-                          href={`/company/posts/${post.id}/edit`}
-                          className="text-xs text-blue-600 hover:underline"
-                        >
-                          編集
-                        </Link>
-                        <span className="text-slate-200">|</span>
-                        <StatusChanger
-                          postId={post.id}
-                          currentStatus={post.post_status}
-                          onChanged={handleStatusChange}
+                {filteredPosts.map((post) => {
+                  const canEdit =
+                    isMasterAdmin ||
+                    post.created_by_user_id === currentUserId;
+                  return (
+                    <tr
+                      key={post.id}
+                      className={`border-b last:border-0 hover:bg-slate-50 transition-colors ${
+                        isOfficialMode && post.post_type === "OFFICIAL"
+                          ? "border-blue-50"
+                          : "border-slate-100"
+                      }`}
+                    >
+                      <td className="px-4 py-3">
+                        <PostThumbnail
+                          thumbnailUrl={post.thumbnail_url}
+                          title={post.title}
+                          type={post.post_type}
+                          size="sm"
                         />
-                        <span className="text-slate-200">|</span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="font-medium text-default-800 line-clamp-2 max-w-xs">
+                          {post.title}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <PostTypeBadge type={post.post_type} />
+                      </td>
+                      <td className="px-4 py-3">
+                        <PostStatusBadge status={post.post_status} />
+                      </td>
+                      <td className="px-4 py-3">
                         <Link
                           href={`/company/applications?postId=${post.id}`}
-                          className="text-xs text-slate-500 hover:text-slate-800 hover:underline"
+                          className="text-sm font-medium text-primary hover:underline"
                         >
-                          応募一覧
+                          {post.application_count}件
                         </Link>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="text-xs text-default-400">
+                          {new Date(post.updated_at).toLocaleDateString(
+                            "ja-JP",
+                          )}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-3">
+                          {canEdit ? (
+                            <>
+                              <Link
+                                href={`/company/posts/${post.id}/edit`}
+                                className="text-xs text-blue-600 hover:underline"
+                              >
+                                編集
+                              </Link>
+                              <span className="text-slate-200">|</span>
+                              <StatusChanger
+                                postId={post.id}
+                                currentStatus={post.post_status}
+                                onChanged={handleStatusChange}
+                              />
+                              <span className="text-slate-200">|</span>
+                            </>
+                          ) : (
+                            <span className="text-xs text-default-300">
+                              閲覧のみ
+                            </span>
+                          )}
+                          <Link
+                            href={`/company/applications?postId=${post.id}`}
+                            className="text-xs text-slate-500 hover:text-slate-800 hover:underline"
+                          >
+                            応募一覧
+                          </Link>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           )}

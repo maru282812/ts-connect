@@ -3,7 +3,14 @@
 import { Button, Input, Select, SelectItem, Textarea } from "@heroui/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { formLabelClasses } from "@/components/common/FormField";
+import {
+  formInputClasses,
+  formSelectClasses,
+  formTextareaClasses,
+} from "@/components/common/FormField";
+import { ThumbnailInput } from "@/components/common/ThumbnailInput";
+import { FormField } from "@/components/ui/FormField";
+import { CASUAL_POST_STATUSES, isPublicStatus } from "@/lib/postStatus";
 import { createClient } from "@/lib/supabase/client";
 import type { Company, PostStatus } from "@/types/database";
 
@@ -14,6 +21,7 @@ export interface CasualPostDefaultValues {
   thumbnailUrl?: string;
   postStatus?: PostStatus;
   companyId?: string;
+  deadline?: string;
 }
 
 interface NewCasualPostFormProps {
@@ -46,8 +54,9 @@ export function NewCasualPostForm({
     defaultValues?.thumbnailUrl ?? "",
   );
   const [postStatus, setPostStatus] = useState<PostStatus>(
-    defaultValues?.postStatus ?? "PUBLISHED",
+    defaultValues?.postStatus ?? "OPEN",
   );
+  const [deadline, setDeadline] = useState(defaultValues?.deadline ?? "");
   const [companies, setCompanies] = useState<Company[]>([]);
   const [companyId, setCompanyId] = useState(defaultValues?.companyId ?? "");
   const [isLoading, setIsLoading] = useState(false);
@@ -115,8 +124,7 @@ export function NewCasualPostForm({
       resolvedCompanyId = memberData.company_id;
     }
 
-    const resolvedStatus: PostStatus =
-      mode === "user" ? "PUBLISHED" : postStatus;
+    const resolvedStatus: PostStatus = postStatus;
 
     if (isEdit && defaultValues?.id) {
       const { error: updateError } = await supabase
@@ -127,8 +135,9 @@ export function NewCasualPostForm({
           post_status: resolvedStatus,
           company_id: resolvedCompanyId,
           thumbnail_url: thumbnailUrl || null,
+          deadline_at: deadline ? new Date(deadline).toISOString() : null,
           published_at:
-            resolvedStatus === "PUBLISHED" ? new Date().toISOString() : null,
+            isPublicStatus(resolvedStatus) ? new Date().toISOString() : null,
           updated_at: new Date().toISOString(),
         })
         .eq("id", defaultValues.id);
@@ -151,7 +160,6 @@ export function NewCasualPostForm({
       return;
     }
 
-    // create
     const { data: inserted, error: insertError } = await supabase
       .from("posts")
       .insert({
@@ -161,9 +169,11 @@ export function NewCasualPostForm({
         post_status: resolvedStatus,
         company_id: resolvedCompanyId,
         thumbnail_url: thumbnailUrl || null,
+        deadline_at: deadline ? new Date(deadline).toISOString() : null,
         created_by_user_id: user.id,
-        published_at:
-          resolvedStatus === "PUBLISHED" ? new Date().toISOString() : null,
+        published_at: isPublicStatus(resolvedStatus)
+          ? new Date().toISOString()
+          : null,
       })
       .select()
       .single();
@@ -231,104 +241,88 @@ export function NewCasualPostForm({
               </p>
             )}
 
-            <Input
-              label="タイトル"
-              labelPlacement="outside"
-              value={title}
-              onValueChange={setTitle}
-              isRequired
-              placeholder="どんな投稿ですか？"
-              variant="bordered"
-              size="lg"
-              classNames={{
-                ...formLabelClasses,
-                inputWrapper:
-                  "border-slate-300 hover:border-slate-400 bg-white h-12",
-                input: "text-base",
-              }}
-            />
+            <FormField label="タイトル" required>
+              <Input
+                value={title}
+                onValueChange={setTitle}
+                isRequired
+                placeholder="どんな投稿ですか？"
+                variant="bordered"
+                size="lg"
+                classNames={formInputClasses}
+              />
+            </FormField>
 
-            <Textarea
-              label="本文"
-              labelPlacement="outside"
-              value={body}
-              onValueChange={setBody}
-              isRequired
-              placeholder="詳細を書いてください。相談・告知・募集など何でもOKです"
-              minRows={7}
-              maxRows={16}
-              variant="bordered"
-              classNames={{
-                ...formLabelClasses,
-                inputWrapper:
-                  "border-slate-300 hover:border-slate-400 bg-white",
-                input: "text-base leading-relaxed py-2",
-              }}
-            />
+            <FormField label="本文" required>
+              <Textarea
+                value={body}
+                onValueChange={setBody}
+                isRequired
+                placeholder="詳細を書いてください。相談・告知・募集など何でもOKです"
+                minRows={7}
+                maxRows={16}
+                variant="bordered"
+                classNames={formTextareaClasses}
+              />
+            </FormField>
 
-            <Input
-              label="参考URL（任意）"
-              labelPlacement="outside"
-              value={thumbnailUrl}
-              onValueChange={setThumbnailUrl}
-              placeholder="https://..."
-              variant="bordered"
-              size="lg"
-              classNames={{
-                ...formLabelClasses,
-                inputWrapper:
-                  "border-slate-300 hover:border-slate-400 bg-white h-12",
-                input: "text-base",
-              }}
-            />
+            <FormField label="サムネイル画像">
+              <ThumbnailInput
+                value={thumbnailUrl}
+                onChange={setThumbnailUrl}
+                onError={setError}
+              />
+            </FormField>
 
-            {/* 管理者のみ：補足設定 */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+              <FormField label="締切日（任意）">
+                <Input
+                  type="date"
+                  value={deadline}
+                  onValueChange={setDeadline}
+                  variant="bordered"
+                  size="lg"
+                  classNames={formInputClasses}
+                />
+              </FormField>
+
+              <FormField label="ステータス">
+                <Select
+                  selectedKeys={[postStatus]}
+                  onSelectionChange={(keys) =>
+                    setPostStatus(Array.from(keys)[0] as PostStatus)
+                  }
+                  variant="bordered"
+                  classNames={formSelectClasses}
+                >
+                  {CASUAL_POST_STATUSES.map((s) => (
+                    <SelectItem key={s.value}>{s.label}</SelectItem>
+                  ))}
+                </Select>
+              </FormField>
+            </div>
+
+            {/* 管理者のみ：補足設定（会社選択） */}
             {mode === "admin" && companies.length > 0 && (
               <div className="border-t border-slate-100 pt-6">
                 <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-5">
                   補足設定
                 </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                <FormField label="所属会社" required>
                   <Select
-                    label="所属会社"
-                    labelPlacement="outside"
                     selectedKeys={companyId ? [companyId] : []}
                     onSelectionChange={(keys) =>
                       setCompanyId(Array.from(keys)[0] as string)
                     }
                     isRequired
                     variant="bordered"
-                    classNames={{
-                      ...formLabelClasses,
-                      trigger:
-                        "border-slate-300 hover:border-slate-400 bg-white h-12",
-                      value: "text-base",
-                    }}
+                    classNames={formSelectClasses}
                   >
                     {companies.map((c) => (
                       <SelectItem key={c.id}>{c.name}</SelectItem>
                     ))}
                   </Select>
-
-                  <Select
-                    label="公開ステータス"
-                    labelPlacement="outside"
-                    selectedKeys={[postStatus]}
-                    onSelectionChange={(keys) =>
-                      setPostStatus(Array.from(keys)[0] as PostStatus)
-                    }
-                    variant="bordered"
-                    classNames={{
-                      ...formLabelClasses,
-                      trigger:
-                        "border-slate-300 hover:border-slate-400 bg-white h-12",
-                      value: "text-base",
-                    }}
-                  >
-                    <SelectItem key="PUBLISHED">公開する</SelectItem>
-                    <SelectItem key="DRAFT">下書き保存</SelectItem>
-                  </Select>
-                </div>
+                </FormField>
               </div>
             )}
           </div>

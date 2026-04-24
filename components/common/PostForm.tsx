@@ -13,6 +13,13 @@ import {
 } from "@heroui/react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import {
+  formInputClasses,
+  formSelectClasses,
+  formTextareaClasses,
+} from "@/components/common/FormField";
+import { FormField } from "@/components/ui/FormField";
+import { POST_STATUSES, isPublicStatus } from "@/lib/postStatus";
 import { createClient } from "@/lib/supabase/client";
 import type { Company, Post, PostStatus, PostType } from "@/types/database";
 
@@ -25,12 +32,6 @@ interface PostFormProps {
 const POST_TYPES: { value: PostType; label: string }[] = [
   { value: "OFFICIAL", label: "公式案件" },
   { value: "CASUAL", label: "気軽に投稿" },
-];
-
-const POST_STATUSES: { value: PostStatus; label: string }[] = [
-  { value: "DRAFT", label: "下書き" },
-  { value: "PUBLISHED", label: "公開中" },
-  { value: "CLOSED", label: "終了" },
 ];
 
 export function PostForm({ post, companies, defaultCompanyId }: PostFormProps) {
@@ -83,22 +84,21 @@ export function PostForm({ post, companies, defaultCompanyId }: PostFormProps) {
       price_text: priceText || null,
       contact_person_name: contactPersonName || null,
       deadline_at: deadlineAt ? new Date(deadlineAt).toISOString() : null,
-      published_at:
-        postStatus === "PUBLISHED" ? new Date().toISOString() : null,
+      published_at: isPublicStatus(postStatus)
+        ? new Date().toISOString()
+        : null,
       closed_at: postStatus === "CLOSED" ? new Date().toISOString() : null,
       thumbnail_url: thumbnailUrl || null,
       updated_at: new Date().toISOString(),
     };
 
-    let result;
-    if (isEdit && post) {
-      result = await supabase.from("posts").update(payload).eq("id", post.id);
-    } else {
-      result = await supabase.from("posts").insert({
-        ...payload,
-        created_by_user_id: user.id,
-      });
-    }
+    const result =
+      isEdit && post
+        ? await supabase.from("posts").update(payload).eq("id", post.id)
+        : await supabase.from("posts").insert({
+            ...payload,
+            created_by_user_id: user.id,
+          });
 
     setIsLoading(false);
 
@@ -127,89 +127,121 @@ export function PostForm({ post, companies, defaultCompanyId }: PostFormProps) {
             </p>
           )}
 
-          <Input
-            label="タイトル"
-            value={title}
-            onValueChange={setTitle}
-            isRequired
-            placeholder="案件タイトルを入力"
-          />
+          <FormField label="タイトル" required>
+            <Input
+              value={title}
+              onValueChange={setTitle}
+              isRequired
+              placeholder="案件タイトルを入力"
+              variant="bordered"
+              size="lg"
+              classNames={formInputClasses}
+            />
+          </FormField>
 
-          <Textarea
-            label="本文"
-            value={body}
-            onValueChange={setBody}
-            isRequired
-            placeholder="案件の詳細を入力してください"
-            minRows={6}
-          />
+          <FormField label="本文" required>
+            <Textarea
+              value={body}
+              onValueChange={setBody}
+              isRequired
+              placeholder="案件の詳細を入力してください"
+              minRows={6}
+              variant="bordered"
+              classNames={formTextareaClasses}
+            />
+          </FormField>
 
           <div className="grid grid-cols-2 gap-4">
-            <Select
-              label="投稿種別"
-              selectedKeys={[postType]}
-              onSelectionChange={(keys) =>
-                setPostType(Array.from(keys)[0] as PostType)
-              }
-            >
-              {POST_TYPES.map((t) => (
-                <SelectItem key={t.value}>{t.label}</SelectItem>
-              ))}
-            </Select>
+            <FormField label="投稿種別">
+              <Select
+                selectedKeys={[postType]}
+                onSelectionChange={(keys) =>
+                  setPostType(Array.from(keys)[0] as PostType)
+                }
+                variant="bordered"
+                classNames={formSelectClasses}
+              >
+                {POST_TYPES.map((t) => (
+                  <SelectItem key={t.value}>{t.label}</SelectItem>
+                ))}
+              </Select>
+            </FormField>
 
-            <Select
-              label="掲載状態"
-              selectedKeys={[postStatus]}
-              onSelectionChange={(keys) =>
-                setPostStatus(Array.from(keys)[0] as PostStatus)
-              }
-            >
-              {POST_STATUSES.map((s) => (
-                <SelectItem key={s.value}>{s.label}</SelectItem>
-              ))}
-            </Select>
+            <FormField label="掲載状態">
+              <Select
+                selectedKeys={[postStatus]}
+                onSelectionChange={(keys) =>
+                  setPostStatus(Array.from(keys)[0] as PostStatus)
+                }
+                variant="bordered"
+                classNames={formSelectClasses}
+              >
+                {POST_STATUSES.map((s) => (
+                  <SelectItem key={s.value}>{s.label}</SelectItem>
+                ))}
+              </Select>
+            </FormField>
           </div>
 
-          <Select
-            label="会社"
-            selectedKeys={companyId ? [companyId] : []}
-            onSelectionChange={(keys) =>
-              setCompanyId(Array.from(keys)[0] as string)
-            }
-            isRequired
-          >
-            {companies.map((c) => (
-              <SelectItem key={c.id}>{c.name}</SelectItem>
-            ))}
-          </Select>
+          <FormField label="会社" required>
+            <Select
+              selectedKeys={companyId ? [companyId] : []}
+              onSelectionChange={(keys) =>
+                setCompanyId(Array.from(keys)[0] as string)
+              }
+              isRequired
+              variant="bordered"
+              classNames={formSelectClasses}
+            >
+              {companies.map((c) => (
+                <SelectItem key={c.id}>{c.name}</SelectItem>
+              ))}
+            </Select>
+          </FormField>
 
-          <Input
-            label="単価"
-            value={priceText}
-            onValueChange={setPriceText}
-            placeholder="例: 5,000円/件"
-          />
+          <FormField label="単価">
+            <Input
+              value={priceText}
+              onValueChange={setPriceText}
+              placeholder="例: 5,000円/件"
+              variant="bordered"
+              size="lg"
+              classNames={formInputClasses}
+            />
+          </FormField>
 
-          <Input
-            label="担当者名"
-            value={contactPersonName}
-            onValueChange={setContactPersonName}
-            placeholder="例: 山田 太郎"
-          />
+          <FormField label="担当者名">
+            <Input
+              value={contactPersonName}
+              onValueChange={setContactPersonName}
+              placeholder="例: 山田 太郎"
+              variant="bordered"
+              size="lg"
+              classNames={formInputClasses}
+            />
+          </FormField>
 
-          <Input
-            label="締切日時"
-            type="datetime-local"
-            value={deadlineAt}
-            onValueChange={setDeadlineAt}
-          />
+          <FormField label="締切日時">
+            <Input
+              type="datetime-local"
+              value={deadlineAt}
+              onValueChange={setDeadlineAt}
+              variant="bordered"
+              size="lg"
+              classNames={formInputClasses}
+            />
+          </FormField>
 
-          <Input
-            label="サムネイルURL"
-            value={thumbnailUrl}
-            onValueChange={setThumbnailUrl}
-            placeholder="https://example.com/image.png"
-          />
+          <FormField label="サムネイルURL">
+            <Input
+              value={thumbnailUrl}
+              onValueChange={setThumbnailUrl}
+              placeholder="https://example.com/image.png"
+              variant="bordered"
+              size="lg"
+              classNames={formInputClasses}
+            />
+          </FormField>
 
           <div className="flex gap-3 pt-2">
             <Button

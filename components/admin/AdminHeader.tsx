@@ -1,6 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
+import { APP_NAME } from "@/constants/appConstants";
 
 interface AdminHeaderProps {
   displayName: string;
@@ -22,7 +23,7 @@ export function AdminHeader({ displayName, email }: AdminHeaderProps) {
     return (
       <header className="bg-blue-950 px-6 py-3 flex items-center justify-between sticky top-0 z-10 border-b border-blue-900">
         <div className="text-sm text-blue-300">
-          <span className="font-semibold text-white">WorkMarket</span>
+          <span className="font-semibold text-white">{APP_NAME}</span>
           <span className="ml-2 text-blue-400">公式案件 管理</span>
         </div>
         <div className="flex items-center gap-3">
@@ -41,7 +42,7 @@ export function AdminHeader({ displayName, email }: AdminHeaderProps) {
   return (
     <header className="bg-slate-800 px-6 py-3 flex items-center justify-between sticky top-0 z-10">
       <div className="text-sm text-slate-300">
-        <span className="font-semibold text-white">WorkMarket</span>
+        <span className="font-semibold text-white">{APP_NAME}</span>
         <span className="ml-2 text-slate-400">管理画面</span>
       </div>
       <div className="flex items-center gap-3">

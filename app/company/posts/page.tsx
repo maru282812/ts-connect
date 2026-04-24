@@ -2,15 +2,19 @@ import {
   type PostRow,
   PostsManagementClient,
 } from "@/components/admin/PostsManagementClient";
+import { getAdminContext } from "@/lib/auth/helpers";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function AdminPostsPage() {
   const supabase = await createClient();
+  const { userId, isMasterAdmin } = await getAdminContext();
 
-  // thumbnail_url / requirements はDBマイグレーション未適用の環境でも動くよう select から除外
+  // RLS が ADMIN=所属会社のみ / MASTER_ADMIN=全件 を自動適用する
   const { data: posts, error } = await supabase
     .from("posts")
-    .select("id, title, post_type, post_status, updated_at")
+    .select(
+      "id, title, post_type, post_status, thumbnail_url, updated_at, created_by_user_id",
+    )
     .order("updated_at", { ascending: false });
 
   if (error) {
@@ -21,7 +25,7 @@ export default async function AdminPostsPage() {
     );
   }
 
-  // 応募数を別途取得
+  // 応募数を別途取得（RLS により ADMIN は所属会社案件の応募のみ取得される）
   const { data: counts } = await supabase
     .from("applications")
     .select("post_id");
@@ -36,10 +40,17 @@ export default async function AdminPostsPage() {
     title: p.title,
     post_type: p.post_type,
     post_status: p.post_status,
-    thumbnail_url: null, // DBマイグレーション適用後に (p as any).thumbnail_url ?? null へ変更
+    thumbnail_url: p.thumbnail_url ?? null,
     application_count: countMap[p.id] ?? 0,
     updated_at: p.updated_at,
+    created_by_user_id: p.created_by_user_id,
   }));
 
-  return <PostsManagementClient posts={postRows} />;
+  return (
+    <PostsManagementClient
+      posts={postRows}
+      currentUserId={userId}
+      isMasterAdmin={isMasterAdmin}
+    />
+  );
 }

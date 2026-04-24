@@ -1,6 +1,12 @@
 import { MyPostsContent } from "@/components/features/MyPostsContent";
 
-export default function MyPostsPage() {
+interface Props {
+  searchParams: Promise<{ success?: string }>;
+}
+
+export default async function MyPostsPage({ searchParams }: Props) {
+  const { success } = await searchParams;
+
   return (
     <div>
       <div className="mb-6">
@@ -9,7 +15,7 @@ export default function MyPostsPage() {
           自分が投稿したコンテンツの一覧・管理
         </p>
       </div>
-      <MyPostsContent />
+      <MyPostsContent editBasePath="/app/posts" successParam={success} />
     </div>
   );
 }

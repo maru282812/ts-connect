@@ -7,24 +7,27 @@ import {
   CardHeader,
   Divider,
   Input,
+  Select,
+  SelectItem,
   Tab,
   Tabs,
 } from "@heroui/react";
 import { useEffect, useState } from "react";
-import { formLabelClasses } from "@/components/common/FormField";
+import {
+  formInputClasses,
+  formInputReadonlyClasses,
+  formSelectClasses,
+} from "@/components/common/FormField";
 import { PageHeader } from "@/components/common/PageHeader";
+import { FormField } from "@/components/ui/FormField";
 import { createClient } from "@/lib/supabase/client";
-
-const inputClasses = {
-  ...formLabelClasses,
-  inputWrapper: "border-slate-300 hover:border-slate-400 bg-white h-12",
-  input: "text-base",
-};
+import type { Company } from "@/types/database";
 
 export function MyPageContent() {
   const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
-  const [companyName, setCompanyName] = useState("");
+  const [companyId, setCompanyId] = useState("");
+  const [companies, setCompanies] = useState<Company[]>([]);
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [isProfileLoading, setIsProfileLoading] = useState(false);
@@ -43,8 +46,27 @@ export function MyPageContent() {
       if (!user) return;
 
       setEmail(user.email ?? "");
-      setDisplayName(user.user_metadata?.display_name ?? "");
-      setCompanyName(user.user_metadata?.company_name ?? "");
+
+      const { data: userProfile } = await supabase
+        .from("users")
+        .select("display_name")
+        .eq("id", user.id)
+        .single();
+      setDisplayName(userProfile?.display_name ?? "");
+
+      const { data: companiesData } = await supabase
+        .from("companies")
+        .select("id, name, created_at, updated_at")
+        .order("name");
+      if (companiesData) setCompanies(companiesData);
+
+      const { data: memberData } = await supabase
+        .from("company_members")
+        .select("company_id")
+        .eq("user_id", user.id)
+        .limit(1)
+        .single();
+      if (memberData?.company_id) setCompanyId(memberData.company_id);
     };
     load();
   }, []);
@@ -66,19 +88,33 @@ export function MyPageContent() {
     }
 
     const { error: authError } = await supabase.auth.updateUser({
-      data: { display_name: displayName, company_name: companyName },
+      data: { display_name: displayName },
     });
 
     const { error: dbError } = await supabase
       .from("users")
-      .update({
-        display_name: displayName,
-        updated_at: new Date().toISOString(),
-      })
+      .update({ display_name: displayName, updated_at: new Date().toISOString() })
       .eq("id", user.id);
 
+    let memberError: Error | null = null;
+    if (companyId) {
+      const { error: delError } = await supabase
+        .from("company_members")
+        .delete()
+        .eq("user_id", user.id);
+
+      if (delError) {
+        memberError = delError;
+      } else {
+        const { error: insError } = await supabase
+          .from("company_members")
+          .insert({ user_id: user.id, company_id: companyId, role: "USER", status: "active" });
+        if (insError) memberError = insError;
+      }
+    }
+
     setIsProfileLoading(false);
-    if (authError ?? dbError) {
+    if (authError ?? dbError ?? memberError) {
       setProfileError("更新に失敗しました");
     } else {
       setProfileSuccess("プロフィールを更新しました");
@@ -134,40 +170,45 @@ export function MyPageContent() {
                     {profileError}
                   </p>
                 )}
-                <Input
-                  label="お名前"
-                  labelPlacement="outside"
-                  value={displayName}
-                  onValueChange={setDisplayName}
-                  isRequired
-                  placeholder="山田 太郎"
-                  variant="bordered"
-                  size="lg"
-                  classNames={inputClasses}
-                />
-                <Input
+                <FormField label="お名前" required>
+                  <Input
+                    value={displayName}
+                    onValueChange={setDisplayName}
+                    isRequired
+                    placeholder="山田 太郎"
+                    variant="bordered"
+                    size="lg"
+                    classNames={formInputClasses}
+                  />
+                </FormField>
+                <FormField
                   label="メールアドレス"
-                  labelPlacement="outside"
-                  value={email}
-                  isReadOnly
-                  variant="bordered"
-                  size="lg"
                   description="メールアドレスの変更はサポートにお問い合わせください"
-                  classNames={{
-                    ...inputClasses,
-                    inputWrapper: "border-slate-200 bg-slate-50 h-12",
-                  }}
-                />
-                <Input
-                  label="所属会社"
-                  labelPlacement="outside"
-                  value={companyName}
-                  onValueChange={setCompanyName}
-                  placeholder="株式会社〇〇"
-                  variant="bordered"
-                  size="lg"
-                  classNames={inputClasses}
-                />
+                >
+                  <Input
+                    value={email}
+                    isReadOnly
+                    variant="bordered"
+                    size="lg"
+                    classNames={formInputReadonlyClasses}
+                  />
+                </FormField>
+                <FormField label="所属会社">
+                  <Select
+                    selectedKeys={companyId ? [companyId] : []}
+                    onSelectionChange={(keys) =>
+                      setCompanyId(Array.from(keys)[0] as string)
+                    }
+                    placeholder="会社を選択してください"
+                    variant="bordered"
+                    size="lg"
+                    classNames={formSelectClasses}
+                  >
+                    {companies.map((c) => (
+                      <SelectItem key={c.id}>{c.name}</SelectItem>
+                    ))}
+                  </Select>
+                </FormField>
                 <div className="flex justify-end pt-2">
                   <Button
                     type="submit"
@@ -204,31 +245,30 @@ export function MyPageContent() {
                     {passwordError}
                   </p>
                 )}
-                <Input
-                  label="新しいパスワード"
-                  labelPlacement="outside"
-                  type="password"
-                  value={newPassword}
-                  onValueChange={setNewPassword}
-                  isRequired
-                  placeholder="8文字以上で入力"
-                  description="8文字以上"
-                  variant="bordered"
-                  size="lg"
-                  classNames={inputClasses}
-                />
-                <Input
-                  label="新しいパスワード（確認）"
-                  labelPlacement="outside"
-                  type="password"
-                  value={confirmPassword}
-                  onValueChange={setConfirmPassword}
-                  isRequired
-                  placeholder="もう一度入力してください"
-                  variant="bordered"
-                  size="lg"
-                  classNames={inputClasses}
-                />
+                <FormField label="新しいパスワード" required description="8文字以上">
+                  <Input
+                    type="password"
+                    value={newPassword}
+                    onValueChange={setNewPassword}
+                    isRequired
+                    placeholder="8文字以上で入力"
+                    variant="bordered"
+                    size="lg"
+                    classNames={formInputClasses}
+                  />
+                </FormField>
+                <FormField label="新しいパスワード（確認）" required>
+                  <Input
+                    type="password"
+                    value={confirmPassword}
+                    onValueChange={setConfirmPassword}
+                    isRequired
+                    placeholder="もう一度入力してください"
+                    variant="bordered"
+                    size="lg"
+                    classNames={formInputClasses}
+                  />
+                </FormField>
                 <div className="flex justify-end pt-2">
                   <Button
                     type="submit"

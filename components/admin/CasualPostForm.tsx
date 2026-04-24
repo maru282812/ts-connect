@@ -3,6 +3,14 @@
 import { Button, Input, Select, SelectItem, Textarea } from "@heroui/react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import {
+  formInputClasses,
+  formSelectClasses,
+  formTextareaClasses,
+} from "@/components/common/FormField";
+import { ThumbnailInput } from "@/components/common/ThumbnailInput";
+import { FormField } from "@/components/ui/FormField";
+import { CASUAL_POST_STATUSES, isPublicStatus } from "@/lib/postStatus";
 import { createClient } from "@/lib/supabase/client";
 import type { Company, Post, PostStatus } from "@/types/database";
 
@@ -13,11 +21,6 @@ interface CasualPostFormProps {
   /** 一般ユーザーの場合 true。ステータス選択・会社選択を隠す */
   isUserMode?: boolean;
 }
-
-const POST_STATUSES: { value: PostStatus; label: string }[] = [
-  { value: "DRAFT", label: "下書き" },
-  { value: "OPEN", label: "公開中" },
-];
 
 export function CasualPostForm({
   post,
@@ -36,6 +39,9 @@ export function CasualPostForm({
   );
   const [postStatus, setPostStatus] = useState<PostStatus>(
     post?.post_status ?? "OPEN",
+  );
+  const [deadlineAt, setDeadlineAt] = useState(
+    post?.deadline_at ? post.deadline_at.slice(0, 10) : "",
   );
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -57,7 +63,6 @@ export function CasualPostForm({
 
     let resolvedCompanyId = companyId;
 
-    // 一般ユーザーモード: 所属会社を自動取得
     if (isUserMode || !resolvedCompanyId) {
       const { data: memberData } = await supabase
         .from("company_members")
@@ -83,19 +88,18 @@ export function CasualPostForm({
       post_status: resolvedStatus,
       company_id: resolvedCompanyId,
       thumbnail_url: thumbnailUrl || null,
-      published_at: resolvedStatus === "OPEN" ? new Date().toISOString() : null,
+      deadline_at: deadlineAt ? new Date(deadlineAt).toISOString() : null,
+      published_at: isPublicStatus(resolvedStatus) ? new Date().toISOString() : null,
       updated_at: new Date().toISOString(),
     };
 
-    let result;
-    if (isEdit && post) {
-      result = await supabase.from("posts").update(payload).eq("id", post.id);
-    } else {
-      result = await supabase.from("posts").insert({
-        ...payload,
-        created_by_user_id: user.id,
-      });
-    }
+    const result =
+      isEdit && post
+        ? await supabase.from("posts").update(payload).eq("id", post.id)
+        : await supabase.from("posts").insert({
+            ...payload,
+            created_by_user_id: user.id,
+          });
 
     setIsLoading(false);
 
@@ -120,59 +124,81 @@ export function CasualPostForm({
         </p>
       )}
 
-      <Input
-        label="タイトル"
-        value={title}
-        onValueChange={setTitle}
-        isRequired
-        placeholder="投稿のタイトルを入力"
-        classNames={{ inputWrapper: "border border-slate-200" }}
-      />
+      <FormField label="タイトル" required>
+        <Input
+          value={title}
+          onValueChange={setTitle}
+          isRequired
+          placeholder="投稿のタイトルを入力"
+          variant="bordered"
+          size="lg"
+          classNames={formInputClasses}
+        />
+      </FormField>
 
-      <Textarea
-        label="本文"
-        value={body}
-        onValueChange={setBody}
-        isRequired
-        placeholder="投稿の内容を入力してください"
-        minRows={6}
-        classNames={{ inputWrapper: "border border-slate-200" }}
-      />
+      <FormField label="本文" required>
+        <Textarea
+          value={body}
+          onValueChange={setBody}
+          isRequired
+          placeholder="投稿の内容を入力してください"
+          minRows={6}
+          variant="bordered"
+          classNames={formTextareaClasses}
+        />
+      </FormField>
 
-      <Input
-        label="サムネイル画像URL（任意）"
-        value={thumbnailUrl}
-        onValueChange={setThumbnailUrl}
-        placeholder="https://..."
-        classNames={{ inputWrapper: "border border-slate-200" }}
-      />
+      <FormField label="サムネイル画像">
+        <ThumbnailInput
+          value={thumbnailUrl}
+          onChange={setThumbnailUrl}
+          onError={setError}
+        />
+      </FormField>
+
+      <FormField label="締切日（任意）">
+        <Input
+          type="date"
+          value={deadlineAt}
+          onValueChange={setDeadlineAt}
+          variant="bordered"
+          size="lg"
+          classNames={formInputClasses}
+        />
+      </FormField>
 
       {!isUserMode && (
         <div className="grid grid-cols-2 gap-4">
-          <Select
-            label="所属会社"
-            selectedKeys={companyId ? [companyId] : []}
-            onSelectionChange={(keys) =>
-              setCompanyId(Array.from(keys)[0] as string)
-            }
-            isRequired
-          >
-            {companies.map((c) => (
-              <SelectItem key={c.id}>{c.name}</SelectItem>
-            ))}
-          </Select>
+          <FormField label="所属会社" required>
+            <Select
+              selectedKeys={companyId ? [companyId] : []}
+              onSelectionChange={(keys) =>
+                setCompanyId(Array.from(keys)[0] as string)
+              }
+              isRequired
+              variant="bordered"
+              classNames={formSelectClasses}
+            >
+              {companies.map((c) => (
+                <SelectItem key={c.id}>{c.name}</SelectItem>
+              ))}
+            </Select>
+          </FormField>
 
-          <Select
-            label="ステータス"
-            selectedKeys={[postStatus]}
-            onSelectionChange={(keys) =>
-              setPostStatus(Array.from(keys)[0] as PostStatus)
-            }
-          >
-            {POST_STATUSES.map((s) => (
-              <SelectItem key={s.value}>{s.label}</SelectItem>
-            ))}
-          </Select>
+          <FormField label="ステータス">
+            <Select
+              selectedKeys={[postStatus]}
+              onSelectionChange={(keys) =>
+                setPostStatus(Array.from(keys)[0] as PostStatus)
+              }
+              variant="bordered"
+              classNames={formSelectClasses}
+            >
+              {CASUAL_POST_STATUSES.map((s) => (
+                <SelectItem key={s.value}>{s.label}</SelectItem>
+              ))}
+            </Select>
+          </FormField>
         </div>
       )}
 

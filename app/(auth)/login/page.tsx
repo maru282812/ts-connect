@@ -11,7 +11,10 @@ import {
 } from "@heroui/react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { formLabelClasses } from "@/components/common/FormField";
+import { formInputClasses } from "@/components/common/FormField";
+import { FormField } from "@/components/ui/FormField";
+import { APP_NAME } from "@/constants/appConstants";
+import { AUTH_MESSAGES } from "@/constants/authMessages";
 import { createClient } from "@/lib/supabase/client";
 
 export default function LoginPage() {
@@ -20,11 +23,15 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isEmailNotConfirmed, setIsEmailNotConfirmed] = useState(false);
+  const [resendStatus, setResendStatus] = useState<"idle" | "loading" | "sent" | "error">("idle");
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setError(null);
+    setIsEmailNotConfirmed(false);
+    setResendStatus("idle");
 
     const supabase = createClient();
 
@@ -34,21 +41,47 @@ export default function LoginPage() {
     });
 
     if (authError) {
-      setError("メールアドレスまたはパスワードが正しくありません");
+      const authErrorCode = (authError as { code?: string }).code;
+      const authErrorMessage = authError.message.toLowerCase();
+      if (
+        authErrorCode === "email_not_confirmed" ||
+        authErrorMessage.includes("email not confirmed")
+      ) {
+        setIsEmailNotConfirmed(true);
+        setError(
+          "メールアドレスの確認が完了していないため、ログインできません。",
+        );
+      } else {
+        setError("メールアドレスまたはパスワードが正しくありません");
+      }
       setIsLoading(false);
       return;
     }
 
-    const systemRole = data.user?.user_metadata?.system_role as
-      | string
-      | undefined;
-    if (systemRole === "ADMIN") {
+    const { data: profile } = await supabase
+      .from("users")
+      .select("system_role")
+      .eq("id", data.user.id)
+      .single();
+
+    if (profile?.system_role === "ADMIN") {
       router.push("/company/posts");
     } else {
       router.push("/app/posts");
     }
     router.refresh();
   };
+
+  const handleResendConfirmation = async () => {
+    setResendStatus("loading");
+    const supabase = createClient();
+    const { error: resendError } = await supabase.auth.resend({
+      type: "signup",
+      email,
+    });
+    setResendStatus(resendError ? "error" : "sent");
+  };
+
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 px-4">
@@ -69,52 +102,77 @@ export default function LoginPage() {
               <line x1="12" y1="17" x2="12" y2="21" />
             </svg>
           </div>
-          <h1 className="text-2xl font-bold text-default-900">WorkMarket</h1>
+          <h1 className="text-2xl font-bold text-default-900">{APP_NAME}</h1>
           <p className="text-sm text-default-500">アカウントにログイン</p>
         </CardHeader>
         <CardBody className="px-10 pb-10">
           <form onSubmit={handleLogin} className="flex flex-col gap-6">
             {error && (
-              <div className="bg-danger-50 border border-danger-200 rounded-lg p-3">
-                <p className="text-danger text-sm">{error}</p>
+              <div className="bg-danger-50 border border-danger-200 rounded-lg p-4 flex flex-col gap-3">
+                <p className="text-danger text-sm font-medium">{error}</p>
+                {isEmailNotConfirmed && (
+                  <div className="flex flex-col gap-2">
+                    <p className="text-default-600 text-xs">
+                      登録時に送信した確認メール内のリンクをクリックしてからログインしてください。
+                      メールが見つからない場合は再送できます。
+                    </p>
+                    {resendStatus === "sent" ? (
+                      <p className="text-success text-xs font-medium">
+                        {AUTH_MESSAGES.CONFIRM_RESEND_SENT}
+                      </p>
+                    ) : resendStatus === "error" ? (
+                      <p className="text-danger text-xs">
+                        {AUTH_MESSAGES.CONFIRM_RESEND_ERROR}
+                      </p>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="bordered"
+                        color="primary"
+                        isLoading={resendStatus === "loading"}
+                        onPress={handleResendConfirmation}
+                        className="self-start text-xs"
+                      >
+                        確認メールを再送する
+                      </Button>
+                    )}
+                  </div>
+                )}
               </div>
             )}
-            <Input
-              label="メールアドレス"
-              labelPlacement="outside"
-              type="email"
-              value={email}
-              onValueChange={setEmail}
-              isRequired
-              autoComplete="email"
-              placeholder="your@email.com"
-              variant="bordered"
-              size="lg"
-              classNames={{
-                ...formLabelClasses,
-                inputWrapper:
-                  "bg-white border-slate-300 hover:border-slate-400 h-12",
-                input: "text-base",
-              }}
-            />
-            <Input
-              label="パスワード"
-              labelPlacement="outside"
-              type="password"
-              value={password}
-              onValueChange={setPassword}
-              isRequired
-              autoComplete="current-password"
-              placeholder="パスワードを入力"
-              variant="bordered"
-              size="lg"
-              classNames={{
-                ...formLabelClasses,
-                inputWrapper:
-                  "bg-white border-slate-300 hover:border-slate-400 h-12",
-                input: "text-base",
-              }}
-            />
+            <FormField label="メールアドレス" required>
+              <Input
+                type="email"
+                value={email}
+                onValueChange={setEmail}
+                isRequired
+                autoComplete="email"
+                placeholder="your@email.com"
+                variant="bordered"
+                size="lg"
+                classNames={formInputClasses}
+              />
+            </FormField>
+            <div className="flex flex-col gap-1.5">
+              <FormField label="パスワード" required>
+                <Input
+                  type="password"
+                  value={password}
+                  onValueChange={setPassword}
+                  isRequired
+                  autoComplete="current-password"
+                  placeholder="パスワードを入力"
+                  variant="bordered"
+                  size="lg"
+                  classNames={formInputClasses}
+                />
+              </FormField>
+              <div className="flex justify-end">
+                <Link href="/forgot-password" size="sm" color="primary">
+                  パスワードをお忘れですか？
+                </Link>
+              </div>
+            </div>
             <Button
               type="submit"
               color="primary"
