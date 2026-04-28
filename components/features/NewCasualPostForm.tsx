@@ -65,29 +65,43 @@ export function NewCasualPostForm({
   useEffect(() => {
     if (mode !== "admin") return;
     const supabase = createClient();
-    supabase
-      .from("companies")
-      .select("*")
-      .order("name")
-      .then(({ data }) => {
-        setCompanies(data ?? []);
-        if (data && data.length > 0 && !companyId) {
-          supabase.auth.getUser().then(({ data: { user } }) => {
-            if (!user) return;
-            supabase
-              .from("company_members")
-              .select("company_id")
-              .eq("user_id", user.id)
-              .limit(1)
-              .single()
-              .then(({ data: memberData }) => {
-                if (memberData?.company_id) {
-                  setCompanyId(memberData.company_id);
-                }
-              });
-          });
-        }
-      });
+    const fetchCompanies = async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data: profile } = await supabase
+        .from("users")
+        .select("system_role")
+        .eq("id", user.id)
+        .single();
+      const isMasterAdmin = profile?.system_role === "MASTER_ADMIN";
+
+      const { data: memberships } = await supabase
+        .from("company_members")
+        .select("company_id")
+        .eq("user_id", user.id)
+        .eq("status", "active");
+      const companyIds = memberships?.map((m) => m.company_id) ?? [];
+
+      const { data } = isMasterAdmin
+        ? await supabase.from("companies").select("*").order("name")
+        : companyIds.length > 0
+          ? await supabase
+              .from("companies")
+              .select("*")
+              .in("id", companyIds)
+              .order("name")
+          : { data: [] };
+
+      setCompanies(data ?? []);
+      if (!companyId) {
+        setCompanyId((data ?? [])[0]?.id ?? "");
+      }
+    };
+
+    fetchCompanies();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, companyId]);
 
@@ -113,6 +127,7 @@ export function NewCasualPostForm({
         .from("company_members")
         .select("company_id")
         .eq("user_id", user.id)
+        .eq("status", "active")
         .limit(1)
         .single();
 

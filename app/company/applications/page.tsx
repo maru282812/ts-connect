@@ -5,16 +5,29 @@ import {
 import { PageHeader } from "@/components/common/PageHeader";
 import { createClient } from "@/lib/supabase/server";
 
-export default async function AdminApplicationsPage() {
+interface AdminApplicationsPageProps {
+  searchParams: Promise<{ postId?: string }>;
+}
+
+export default async function AdminApplicationsPage({
+  searchParams,
+}: AdminApplicationsPageProps) {
   const supabase = await createClient();
+  const { postId } = await searchParams;
 
   // RLS が ADMIN=所属会社案件の応募のみ / MASTER_ADMIN=全件 を自動適用する
-  const { data: applications, error } = await supabase
+  let query = supabase
     .from("applications")
     .select(
       "id, post_id, applicant_name_snapshot, applicant_email_snapshot, applicant_company_snapshot, post_title_snapshot, application_type, application_status, applied_at, message",
     )
     .order("applied_at", { ascending: false });
+
+  if (postId) {
+    query = query.eq("post_id", postId);
+  }
+
+  const { data: applications, error } = await query;
 
   if (error) {
     return (

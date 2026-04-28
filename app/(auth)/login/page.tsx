@@ -64,7 +64,10 @@ export default function LoginPage() {
       .eq("id", data.user.id)
       .single();
 
-    if (profile?.system_role === "ADMIN") {
+    if (
+      profile?.system_role === "ADMIN" ||
+      profile?.system_role === "MASTER_ADMIN"
+    ) {
       router.push("/company/posts");
     } else {
       router.push("/app/posts");

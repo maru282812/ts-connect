@@ -1,68 +1,93 @@
 import { NextResponse } from "next/server";
-import { sendMail, type MailResult } from "@/lib/mail";
+import { sendMail } from "@/lib/mail";
 import {
   buildApplicationEmailHtml,
   buildApplicationEmailSubject,
   buildApplicationEmailText,
 } from "@/lib/mail/templates/application";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type { ApplicationType, PostType } from "@/types/database";
+
+type ApplicationRequestBody = {
+  post_id?: string;
+  message?: string;
+  application_type?: ApplicationType;
+};
+
+type PostForNotification = {
+  id: string;
+  title: string;
+  post_type: PostType;
+  post_status: string;
+  created_by_user_id: string;
+  creator?: {
+    id: string;
+    email: string | null;
+    display_name: string | null;
+  } | null;
+};
+
+function isApplicationType(value: unknown): value is ApplicationType {
+  return value === "APPLY" || value === "INQUIRY";
+}
+
+function normalizeCreator(
+  creator: PostForNotification["creator"] | PostForNotification["creator"][],
+): PostForNotification["creator"] {
+  return Array.isArray(creator) ? creator[0] : creator;
+}
 
 export async function POST(request: Request) {
   try {
     const supabase = await createClient();
 
-    // 認証チェック
     const {
       data: { user },
     } = await supabase.auth.getUser();
 
     if (!user) {
-      return NextResponse.json({ error: "認証が必要です" }, { status: 401 });
+      return NextResponse.json(
+        { error: "ログインが必要です。" },
+        { status: 401 },
+      );
     }
 
-    // リクエストボディ
-    const body = await request.json();
-    const {
-      post_id,
-      message,
-      application_type,
-    }: {
-      post_id: string;
-      message?: string;
-      application_type: ApplicationType;
-    } = body;
+    const body = (await request.json()) as ApplicationRequestBody;
+    const { post_id, message, application_type } = body;
 
-    if (!post_id || !application_type) {
+    if (!post_id || !isApplicationType(application_type)) {
       return NextResponse.json(
-        { error: "必須パラメータが不足しています" },
+        { error: "応募に必要なパラメータが不足しています。" },
         { status: 400 },
       );
     }
 
-    // 案件情報取得（投稿者のメールアドレスも取得）
-    const { data: post, error: postError } = await supabase
+    const admin = createAdminClient();
+    const { data: postData, error: postError } = await admin
       .from("posts")
-      .select("*, companies(id, name), creator:created_by_user_id(email)")
+      .select(
+        "id, title, post_type, post_status, created_by_user_id, creator:created_by_user_id(id, email, display_name)",
+      )
       .eq("id", post_id)
       .in("post_status", ["OPEN", "IN_PROGRESS"])
       .single();
 
-    if (postError || !post) {
+    if (postError || !postData) {
       return NextResponse.json(
-        { error: "案件が見つかりませんでした" },
+        { error: "案件が見つからないか、応募できない状態です。" },
         { status: 404 },
       );
     }
 
-    // ユーザープロフィール取得
+    const post = postData as unknown as PostForNotification;
+
     const { data: userProfile } = await supabase
       .from("users")
       .select("display_name, email")
       .eq("id", user.id)
-      .single();
+      .maybeSingle();
 
-    // 所属会社取得（company_members 経由）
     const { data: memberData } = await supabase
       .from("company_members")
       .select("companies(name)")
@@ -70,12 +95,12 @@ export async function POST(request: Request) {
       .limit(1)
       .maybeSingle();
 
-    const applicantName = userProfile?.display_name ?? "不明";
-    const applicantEmail = user.email ?? "";
+    const applicantName = userProfile?.display_name ?? user.email ?? "未登録";
+    const applicantEmail = userProfile?.email ?? user.email ?? "";
     const applicantCompany =
-      (memberData?.companies as { name: string } | null)?.name ?? null;
+      (memberData?.companies as unknown as { name: string } | null)?.name ??
+      null;
 
-    // 重複送信チェック（同一ユーザー × 同一投稿 × 同一タイプ）
     const { data: existing } = await supabase
       .from("applications")
       .select("id")
@@ -87,29 +112,27 @@ export async function POST(request: Request) {
     if (existing) {
       const label =
         application_type === "INQUIRY"
-          ? "聞いてみる"
+          ? "問い合わせ"
           : post.post_type === "OFFICIAL"
             ? "応募"
             : "参加希望";
+
       return NextResponse.json(
-        { error: `すでに「${label}」済みです` },
+        { error: `すでに${label}済みです。` },
         { status: 409 },
       );
     }
 
-    // 応募ステータス決定
+    const appliedAt = new Date().toISOString();
     const applicationStatus =
       application_type === "APPLY" ? "APPLIED" : "INQUIRY";
-
-    // applications テーブルに挿入
-    const appliedAt = new Date().toISOString();
 
     const { data: application, error: insertError } = await supabase
       .from("applications")
       .insert({
         post_id,
         applicant_user_id: user.id,
-        message: message ?? null,
+        message: message?.trim() || null,
         application_type,
         application_status: applicationStatus,
         applicant_email_snapshot: applicantEmail,
@@ -122,91 +145,58 @@ export async function POST(request: Request) {
       .single();
 
     if (insertError) {
-      console.error("[API] Insert error:", insertError);
+      console.error("[API] Failed to create application:", insertError);
       return NextResponse.json(
-        { error: "応募の送信に失敗しました" },
+        { error: "応募の送信に失敗しました。" },
         { status: 500 },
       );
     }
 
-    // 環境変数の設定有無を確認（値は出さない）
-    console.log("[MAIL] env check", {
-      MAIL_PROVIDER: process.env.MAIL_PROVIDER ?? "(unset → console)",
-      hasResendApiKey: !!process.env.RESEND_API_KEY,
-      hasMailFromAddress: !!process.env.MAIL_FROM_ADDRESS,
-      hasAdminNotificationEmail: !!process.env.ADMIN_NOTIFICATION_EMAIL,
-    });
+    const creator = normalizeCreator(
+      post.creator as
+        | PostForNotification["creator"]
+        | PostForNotification["creator"][],
+    );
+    const creatorEmail = creator?.email;
 
-    // 通知先: 投稿者のメール → フォールバックで管理者メール
-    const creatorEmail = (post as { creator?: { email?: string } }).creator
-      ?.email;
     if (!creatorEmail) {
-      console.warn(
-        "[MAIL] creator email is null/undefined — falling back to ADMIN_NOTIFICATION_EMAIL",
-        {
-          post_id,
-          created_by_user_id: post.created_by_user_id,
-        },
-      );
-    }
-    const notificationEmail =
-      creatorEmail ??
-      process.env.ADMIN_NOTIFICATION_EMAIL ??
-      "admin@example.com";
+      console.warn("[MAIL] Post creator email was not found.", {
+        postId: post.id,
+        createdByUserId: post.created_by_user_id,
+      });
+    } else {
+      const emailData = {
+        applicantName,
+        applicantEmail,
+        applicantCompany,
+        postTitle: post.title,
+        postType: post.post_type,
+        applicationType: application_type,
+        message: message?.trim() || null,
+        appliedAt,
+      };
 
-    const postType = (post.post_type as PostType) ?? "OFFICIAL";
-
-    const emailData = {
-      applicantName,
-      applicantEmail,
-      applicantCompany,
-      postTitle: post.title as string,
-      postType,
-      applicationType: application_type,
-      message: message ?? null,
-      appliedAt,
-    };
-
-    // 送信直前のペイロードログ
-    console.log("[MAIL] application mail payload", {
-      postId: post_id,
-      postTitle: post.title,
-      creatorEmail: creatorEmail ?? null,
-      notificationEmail,
-      applicantEmail,
-      applicationType: application_type,
-    });
-
-    let mailResult: MailResult | undefined;
-    try {
-      mailResult = await sendMail({
-        to: notificationEmail,
-        subject: buildApplicationEmailSubject(
-          application_type,
-          post.title as string,
-          postType,
-        ),
+      const mailResult = await sendMail({
+        to: creatorEmail,
+        subject: buildApplicationEmailSubject(post.title),
         html: buildApplicationEmailHtml(emailData),
         text: buildApplicationEmailText(emailData),
       });
-      if (mailResult.success) {
-        console.log("[MAIL] mail send success", {
-          messageId: mailResult.messageId,
-        });
-      } else {
-        console.error("[MAIL] mail send failed (result)", {
+
+      if (!mailResult.success) {
+        console.error("[MAIL] Failed to send application notification.", {
+          postId: post.id,
+          applicationId: application.id,
           error: mailResult.error,
         });
       }
-    } catch (mailErr) {
-      console.error("[MAIL] mail send threw exception", mailErr);
     }
 
     return NextResponse.json({ data: application }, { status: 201 });
   } catch (err) {
-    console.error("[API] Unexpected error:", err);
+    console.error("[API] Unexpected application error:", err);
     return NextResponse.json(
-      { error: "サーバーエラーが発生しました" },
+      { error: "サーバーエラーが発生しました。" },
       { status: 500 },
     );
   }

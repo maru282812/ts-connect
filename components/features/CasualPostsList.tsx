@@ -37,11 +37,26 @@ export function CasualPostsList({
   const [search, setSearch] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [showSuccess, setShowSuccess] = useState(!!successParam);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [isMasterAdmin, setIsMasterAdmin] = useState(false);
 
   useEffect(() => {
     const fetchPosts = async () => {
       setIsLoading(true);
       const supabase = createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      setCurrentUserId(user?.id ?? null);
+
+      if (mode === "admin" && user) {
+        const { data: profile } = await supabase
+          .from("users")
+          .select("system_role")
+          .eq("id", user.id)
+          .single();
+        setIsMasterAdmin(profile?.system_role === "MASTER_ADMIN");
+      }
 
       let query = supabase
         .from("posts")
@@ -170,7 +185,10 @@ export function CasualPostsList({
               </tr>
             </thead>
             <tbody>
-              {posts.map((post) => (
+              {posts.map((post) => {
+                const canEdit =
+                  isMasterAdmin || post.created_by_user_id === currentUserId;
+                return (
                 <tr
                   key={post.id}
                   className="border-b last:border-0 hover:bg-slate-50 transition-colors border-slate-100"
@@ -200,17 +218,29 @@ export function CasualPostsList({
                       >
                         詳細
                       </Link>
-                      <span className="text-slate-200">|</span>
+                      {canEdit ? (
+                        <>
+                          <span className="text-slate-200">|</span>
                       <Link
                         href={`/company/posts/${post.id}/edit`}
                         className="text-xs text-blue-600 hover:underline"
                       >
                         編集
-                      </Link>
+                        </Link>
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-slate-200">|</span>
+                          <span className="text-xs text-default-300">
+                            閲覧のみ
+                          </span>
+                        </>
+                      )}
                     </div>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>

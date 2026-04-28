@@ -78,7 +78,7 @@ function InvalidCard({ reason, pageState }: { reason: string; pageState: PageSta
 function ResetPasswordContent() {
   const searchParams = useSearchParams();
   const [pageState, setPageState] = useState<PageState>("loading");
-  const [invalidReason, setInvalidReason] = useState(AUTH_MESSAGES.LINK_INVALID);
+  const [invalidReason, setInvalidReason] = useState<string>(AUTH_MESSAGES.LINK_INVALID);
   const [password, setPassword] = useState("");
   const [passwordConfirm, setPasswordConfirm] = useState("");
   const [isLoading, setIsLoading] = useState(false);

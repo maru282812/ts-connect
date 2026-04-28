@@ -1,20 +1,36 @@
-import {
-  Button,
-  Card,
-  CardBody,
-  CardHeader,
-  Chip,
-  Divider,
-  Input,
-  Textarea,
-} from "@heroui/react";
+import { Button, Card, CardBody, CardHeader, Chip, Divider } from "@heroui/react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { FormField } from "@/components/ui/FormField";
 import { createClient } from "@/lib/supabase/server";
 import type { PostWithRelations } from "@/types/database";
 
 interface ArchivePostDetailPageProps {
   params: Promise<{ postId: string }>;
+}
+
+function ReadonlyField({ value }: { value: string }) {
+  return (
+    <div className="bg-slate-50 border border-slate-200 rounded-lg px-3 h-12 flex items-center text-base text-slate-800">
+      {value}
+    </div>
+  );
+}
+
+function ReadonlyTextarea({ value }: { value: string }) {
+  return (
+    <div className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-3 text-base text-slate-800 leading-relaxed min-h-[160px] whitespace-pre-wrap">
+      {value}
+    </div>
+  );
+}
+
+function SectionHeading({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="border-l-4 border-slate-400 pl-3 mb-1">
+      <p className="text-sm font-semibold text-slate-500">{children}</p>
+    </div>
+  );
 }
 
 export default async function ArchivePostDetailPage({
@@ -64,28 +80,50 @@ export default async function ArchivePostDetailPage({
           </div>
         </CardHeader>
         <Divider />
-        <CardBody className="flex flex-col gap-4">
-          <div className="grid grid-cols-2 gap-4">
-            <Input
-              label="投稿種別"
-              value={p.post_type === "OFFICIAL" ? "公式案件" : "気軽に投稿"}
-              isReadOnly
-            />
-            <Input label="掲載状態" value="終了" isReadOnly />
-            <Input label="単価" value={p.price_text ?? "—"} isReadOnly />
-            <Input
-              label="担当者"
-              value={p.contact_person_name ?? "—"}
-              isReadOnly
-            />
-            <Input label="終了日" value={closedAt} isReadOnly />
-            <Input
-              label="作成者"
-              value={p.users?.display_name ?? "匿名"}
-              isReadOnly
-            />
+        <CardBody className="flex flex-col gap-6">
+
+          {/* ── 基本情報 ── */}
+          <div className="flex flex-col gap-4">
+            <SectionHeading>基本情報</SectionHeading>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <FormField label="投稿種別">
+                <ReadonlyField
+                  value={p.post_type === "OFFICIAL" ? "公式案件" : "気軽に投稿"}
+                />
+              </FormField>
+              <FormField label="掲載状態">
+                <ReadonlyField value="終了" />
+              </FormField>
+            </div>
           </div>
-          <Textarea label="本文" value={p.body} isReadOnly minRows={6} />
+
+          {/* ── 補足情報 ── */}
+          <div className="flex flex-col gap-4">
+            <SectionHeading>補足情報</SectionHeading>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <FormField label="単価">
+                <ReadonlyField value={p.price_text ?? "—"} />
+              </FormField>
+              <FormField label="担当者">
+                <ReadonlyField value={p.contact_person_name ?? "—"} />
+              </FormField>
+              <FormField label="終了日">
+                <ReadonlyField value={closedAt} />
+              </FormField>
+              <FormField label="作成者">
+                <ReadonlyField value={p.users?.display_name ?? "匿名"} />
+              </FormField>
+            </div>
+          </div>
+
+          {/* ── 本文 ── */}
+          <div className="flex flex-col gap-4">
+            <SectionHeading>本文</SectionHeading>
+            <FormField label="案件内容">
+              <ReadonlyTextarea value={p.body} />
+            </FormField>
+          </div>
+
         </CardBody>
       </Card>
     </div>

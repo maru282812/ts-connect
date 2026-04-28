@@ -13,12 +13,22 @@ interface EditPostPageProps {
 export default async function EditPostPage({ params }: EditPostPageProps) {
   const { postId } = await params;
   const supabase = await createClient();
-  const { userId, isMasterAdmin } = await getAdminContext();
+  const { userId, isMasterAdmin, companyIds } = await getAdminContext();
+
+  const companiesPromise = isMasterAdmin
+    ? supabase.from("companies").select("*").order("name")
+    : companyIds.length > 0
+      ? supabase
+          .from("companies")
+          .select("*")
+          .in("id", companyIds)
+          .order("name")
+      : Promise.resolve({ data: [] });
 
   const [{ data: post }, { data: companies }] = await Promise.all([
     // RLS により ADMIN は所属会社の投稿のみ取得できる（他社→null→notFound）
     supabase.from("posts").select("*").eq("id", postId).single(),
-    supabase.from("companies").select("*").order("name"),
+    companiesPromise,
   ]);
 
   if (!post) {

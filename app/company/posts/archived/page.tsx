@@ -23,13 +23,21 @@ export default async function ArchivedPostsPage() {
   const supabase = await createClient();
   const { userId, isMasterAdmin } = await getAdminContext();
 
-  const { data: posts } = await supabase
+  const { data: posts, error } = await supabase
     .from("posts")
     .select(
       "*, companies(id, name), users:created_by_user_id(id, display_name, email)",
     )
     .eq("post_status", "CLOSED")
     .order("closed_at", { ascending: false });
+
+  if (error) {
+    return (
+      <div className="text-sm text-danger p-4">
+        過去案件の取得に失敗しました: {error.message}
+      </div>
+    );
+  }
 
   const archivedPosts = (posts as PostWithRelations[]) ?? [];
 

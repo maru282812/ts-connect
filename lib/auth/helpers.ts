@@ -39,6 +39,7 @@ export interface AdminContext {
   systemRole: SystemRole;
   isMasterAdmin: boolean;
   companyId: string | null;
+  companyIds: string[];
 }
 
 /**
@@ -64,15 +65,17 @@ export async function getAdminContext(): Promise<AdminContext> {
   const isMasterAdmin = systemRole === "MASTER_ADMIN";
 
   let companyId: string | null = null;
+  let companyIds: string[] = [];
   if (!isMasterAdmin) {
-    const { data: member } = await supabase
+    const { data: memberships } = await supabase
       .from("company_members")
       .select("company_id")
       .eq("user_id", user.id)
-      .limit(1)
-      .single();
-    companyId = member?.company_id ?? null;
+      .eq("status", "active");
+
+    companyIds = memberships?.map((m) => m.company_id) ?? [];
+    companyId = companyIds[0] ?? null;
   }
 
-  return { userId: user.id, systemRole, isMasterAdmin, companyId };
+  return { userId: user.id, systemRole, isMasterAdmin, companyId, companyIds };
 }

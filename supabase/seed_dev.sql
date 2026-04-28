@@ -9,6 +9,9 @@
 --
 -- 【ログイン情報】共通パスワード: password123
 --
+--   スーパー管理者:
+--     master@example.com (マスター管理者 / 全社アクセス / company_members 所属なし)
+--
 --   管理者:
 --     admin1@example.com (管理者A / T's agency holdings + 株式会社TSHD)
 --     admin2@example.com (管理者B / ゼロプライド株式会社)
@@ -36,6 +39,9 @@ declare
   co3 uuid := '33333333-3333-3333-3333-333333333333'; -- 株式会社ULTI-ME
   co4 uuid := '44444444-4444-4444-4444-444444444444'; -- 株式会社T's grace
   co5 uuid := '55555555-5555-5555-5555-555555555555'; -- 株式会社TSHD
+
+  -- ===== スーパー管理者 UUID =====
+  mstr uuid := 'aa000000-0000-0000-0000-000000000000'; -- マスター管理者
 
   -- ===== 管理者 UUID =====
   adm1 uuid := 'aa000001-0000-0000-0000-000000000000'; -- 管理者A
@@ -114,6 +120,13 @@ begin
     confirmation_token, recovery_token,
     email_change_token_new, email_change
   ) VALUES
+    -- マスター管理者
+    ('00000000-0000-0000-0000-000000000000', mstr,
+     'authenticated', 'authenticated', 'master@example.com',
+     pw_hash, now(),
+     '{"provider":"email","providers":["email"]}',
+     '{"display_name":"マスター管理者"}',
+     false, now(), now(), '', '', '', ''),
     -- 管理者A
     ('00000000-0000-0000-0000-000000000000', adm1,
      'authenticated', 'authenticated', 'admin1@example.com',
@@ -177,6 +190,7 @@ begin
   -- ==========================================================
 
   INSERT INTO public.users (id, email, display_name, system_role, account_status) VALUES
+    (mstr, 'master@example.com', 'マスター管理者', 'MASTER_ADMIN', 'ACTIVE'),
     (adm1, 'admin1@example.com', '管理者A',   'ADMIN', 'ACTIVE'),
     (adm2, 'admin2@example.com', '管理者B',   'ADMIN', 'ACTIVE'),
     (adm3, 'admin3@example.com', '管理者C',   'ADMIN', 'ACTIVE'),
@@ -1029,6 +1043,7 @@ begin
 
   RAISE NOTICE '===========================================';
   RAISE NOTICE 'seed_dev.sql の投入が完了しました。';
+  RAISE NOTICE '  スーパー管理者: 1件 (master@example.com)';
   RAISE NOTICE '  管理者: 3件 (admin1〜3@example.com)';
   RAISE NOTICE '  一般ユーザー: 5件 (user1〜5@example.com)';
   RAISE NOTICE '  company_members: 10件';

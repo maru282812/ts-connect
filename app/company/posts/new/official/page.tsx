@@ -1,27 +1,24 @@
 import Link from "next/link";
 import { OfficialPostForm } from "@/components/admin/OfficialPostForm";
+import { getAdminContext } from "@/lib/auth/helpers";
 import { createClient } from "@/lib/supabase/server";
 import type { Company } from "@/types/database";
 
 export default async function NewOfficialPostPage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { isMasterAdmin, companyId, companyIds } = await getAdminContext();
 
-  const [{ data: companies }, { data: profile }] = await Promise.all([
-    supabase.from("companies").select("*").order("name"),
-    user
-      ? supabase
-          .from("company_members")
-          .select("company_id")
-          .eq("user_id", user.id)
-          .limit(1)
-          .single()
-      : Promise.resolve({ data: null, error: null }),
-  ]);
+  const { data: companies } = isMasterAdmin
+    ? await supabase.from("companies").select("*").order("name")
+    : companyIds.length > 0
+      ? await supabase
+          .from("companies")
+          .select("*")
+          .in("id", companyIds)
+          .order("name")
+      : { data: [] };
 
-  const defaultCompanyId = profile?.company_id ?? undefined;
+  const defaultCompanyId = companyId ?? undefined;
 
   return (
     <div>
