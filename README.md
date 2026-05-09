@@ -64,7 +64,7 @@ internal-work-market/
 ├── supabase/
 │   ├── migrations/001_initial.sql
 │   └── seed.sql
-└── .env.local.example
+└── .env.example
 ```
 
 ## セットアップ
@@ -86,7 +86,7 @@ npm install
 ### 3. 環境変数の設定
 
 ```bash
-cp .env.local.example .env.local
+cp .env.example .env.local
 ```
 
 `.env.local` を編集して Supabase の情報を設定します。
@@ -225,3 +225,17 @@ ADMIN_NOTIFICATION_EMAIL=admin@example.com
 - [ ] 日程調整
 - [ ] 会社ごとの通知先設定
 - [ ] ポイントシステム
+
+## 環境変数設定
+
+`.env.example` をコピーして `.env.local` を作成してください。
+
+```bash
+cp .env.example .env.local
+```
+
+必要な API キーを設定後、開発サーバーを起動してください。
+
+```bash
+npm run dev
+```

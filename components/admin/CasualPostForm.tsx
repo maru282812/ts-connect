@@ -1,14 +1,15 @@
 "use client";
 
-import { Button, Input, Select, SelectItem, Textarea } from "@heroui/react";
+import { Input, Select, SelectItem } from "@heroui/react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import {
   formInputClasses,
   formSelectClasses,
-  formTextareaClasses,
 } from "@/components/common/FormField";
 import { ThumbnailInput } from "@/components/common/ThumbnailInput";
+import { AppButton } from "@/components/ui/AppButton";
+import { AutoResizeTextarea } from "@/components/ui/AutoResizeTextarea";
 import { FormField } from "@/components/ui/FormField";
 import { CASUAL_POST_STATUSES, isPublicStatus } from "@/lib/postStatus";
 import { createClient } from "@/lib/supabase/client";
@@ -137,14 +138,12 @@ export function CasualPostForm({
       </FormField>
 
       <FormField label="本文" required>
-        <Textarea
+        <AutoResizeTextarea
           value={body}
           onValueChange={setBody}
           isRequired
           placeholder="投稿の内容を入力してください"
-          minRows={6}
-          variant="bordered"
-          classNames={formTextareaClasses}
+          minRows={5}
         />
       </FormField>
 
@@ -203,22 +202,21 @@ export function CasualPostForm({
       )}
 
       <div className="flex gap-3 pt-2">
-        <Button
+        <AppButton
           type="button"
-          variant="flat"
+          variantType="secondary"
           onPress={() => router.back()}
           className="flex-1"
         >
           キャンセル
-        </Button>
-        <Button
+        </AppButton>
+        <AppButton
           type="submit"
-          color="primary"
           isLoading={isLoading}
           className="flex-1"
         >
           {isEdit ? "更新する" : "投稿する"}
-        </Button>
+        </AppButton>
       </div>
     </form>
   );

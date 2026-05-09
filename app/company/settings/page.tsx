@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  Button,
   Card,
   CardBody,
   CardHeader,
@@ -9,20 +8,15 @@ import {
   Input,
 } from "@heroui/react";
 import { useEffect, useState } from "react";
-import {
-  formInputClasses,
-  formInputReadonlyClasses,
-} from "@/components/common/FormField";
+import { formInputClasses } from "@/components/common/FormField";
 import { PageHeader } from "@/components/common/PageHeader";
+import { AppButton } from "@/components/ui/AppButton";
 import { FormField } from "@/components/ui/FormField";
 import { createClient } from "@/lib/supabase/client";
 
 export default function AdminSettingsPage() {
-  const [displayName, setDisplayName] = useState("");
-  const [email, setEmail] = useState("");
-  const [notificationEmail, setNotificationEmail] = useState(
-    process.env.NEXT_PUBLIC_ADMIN_NOTIFICATION_EMAIL ?? "",
-  );
+  const [companyId, setCompanyId] = useState<string | null>(null);
+  const [notificationEmail, setNotificationEmail] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -34,48 +28,50 @@ export default function AdminSettingsPage() {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) return;
-      setEmail(user.email ?? "");
 
-      const { data: profile } = await supabase
-        .from("users")
-        .select("display_name")
-        .eq("id", user.id)
+      const { data: memberData } = await supabase
+        .from("company_members")
+        .select("company_id")
+        .eq("user_id", user.id)
+        .eq("status", "active")
+        .limit(1)
         .single();
-      setDisplayName(profile?.display_name ?? "");
+
+      if (!memberData?.company_id) return;
+      setCompanyId(memberData.company_id);
+
+      const { data: company } = await supabase
+        .from("companies")
+        .select("notification_email")
+        .eq("id", memberData.company_id)
+        .single();
+
+      setNotificationEmail(company?.notification_email ?? "");
     };
     load();
   }, []);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!companyId) {
+      setError("所属会社が見つかりません");
+      return;
+    }
     setIsLoading(true);
     setSuccess(null);
     setError(null);
 
     const supabase = createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      setError("認証エラー");
-      setIsLoading(false);
-      return;
-    }
-
-    const { error: authError } = await supabase.auth.updateUser({
-      data: { display_name: displayName },
-    });
-
     const { error: dbError } = await supabase
-      .from("users")
+      .from("companies")
       .update({
-        display_name: displayName,
+        notification_email: notificationEmail.trim() || null,
         updated_at: new Date().toISOString(),
       })
-      .eq("id", user.id);
+      .eq("id", companyId);
 
     setIsLoading(false);
-    if (authError ?? dbError) {
+    if (dbError) {
       setError("更新に失敗しました");
     } else {
       setSuccess("設定を保存しました");
@@ -84,97 +80,50 @@ export default function AdminSettingsPage() {
 
   return (
     <div className="max-w-2xl mx-auto">
-      <PageHeader title="管理設定" description="管理者アカウントと通知設定" />
+      <PageHeader title="管理設定" description="管理者向け通知設定" />
 
-      <div className="space-y-8">
-        {/* 管理者情報 */}
-        <Card shadow="sm">
-          <CardHeader className="px-6 py-4">
-            <h2 className="text-base font-semibold">管理者情報</h2>
-          </CardHeader>
-          <Divider />
-          <CardBody className="px-6 py-6">
-            <form onSubmit={handleSave} className="flex flex-col gap-6">
-              {success && (
-                <p className="text-success text-sm bg-success-50 rounded-lg p-3">
-                  {success}
-                </p>
-              )}
-              {error && (
-                <p className="text-danger text-sm bg-danger-50 rounded-lg p-3">
-                  {error}
-                </p>
-              )}
-              <FormField label="管理者名" required>
-                <Input
-                  value={displayName}
-                  onValueChange={setDisplayName}
-                  isRequired
-                  placeholder="管理者 太郎"
-                  variant="bordered"
-                  size="lg"
-                  classNames={formInputClasses}
-                />
-              </FormField>
-              <FormField
-                label="メールアドレス"
-                description="メールアドレスの変更はシステム管理者にお問い合わせください"
-              >
-                <Input
-                  value={email}
-                  isReadOnly
-                  variant="bordered"
-                  size="lg"
-                  classNames={formInputReadonlyClasses}
-                />
-              </FormField>
-              <div className="flex justify-end pt-2">
-                <Button
-                  type="submit"
-                  color="primary"
-                  isLoading={isLoading}
-                  className="min-w-28"
-                >
-                  保存する
-                </Button>
-              </div>
-            </form>
-          </CardBody>
-        </Card>
-
-        {/* 通知設定 */}
-        <Card shadow="sm">
-          <CardHeader className="px-6 py-4">
-            <h2 className="text-base font-semibold">通知設定</h2>
-          </CardHeader>
-          <Divider />
-          <CardBody className="px-6 py-6 flex flex-col gap-4">
-            <FormField label="管理者通知先メールアドレス">
+      <Card shadow="sm">
+        <CardHeader className="px-6 py-4">
+          <h2 className="text-base font-semibold">通知設定</h2>
+        </CardHeader>
+        <Divider />
+        <CardBody className="px-6 py-6">
+          <form onSubmit={handleSave} className="flex flex-col gap-6">
+            {success && (
+              <p className="text-success text-sm bg-success-50 rounded-lg p-3">
+                {success}
+              </p>
+            )}
+            {error && (
+              <p className="text-danger text-sm bg-danger-50 rounded-lg p-3">
+                {error}
+              </p>
+            )}
+            <FormField
+              label="通知用メールアドレス"
+              description="応募・問い合わせ等の通知を受け取るメールアドレスです。未設定の場合は、投稿者またはログインユーザーのメールアドレスを利用します。"
+            >
               <Input
                 value={notificationEmail}
                 onValueChange={setNotificationEmail}
+                type="email"
+                placeholder="notify@example.com"
                 variant="bordered"
                 size="lg"
-                isReadOnly
-                classNames={formInputReadonlyClasses}
+                classNames={formInputClasses}
               />
             </FormField>
-            <p className="text-xs text-slate-400 leading-relaxed">
-              応募・問い合わせ通知の送信先です。環境変数{" "}
-              <code className="bg-slate-100 px-1 py-0.5 rounded text-slate-600">
-                ADMIN_NOTIFICATION_EMAIL
-              </code>{" "}
-              で設定します。
-              <br />
-              通知先の変更は{" "}
-              <code className="bg-slate-100 px-1 py-0.5 rounded text-slate-600">
-                .env.local
-              </code>{" "}
-              を更新してください。将来的には会社ごとの通知先設定に拡張予定です。
-            </p>
-          </CardBody>
-        </Card>
-      </div>
+            <div className="flex justify-end pt-2">
+              <AppButton
+                type="submit"
+                isLoading={isLoading}
+              >
+                保存する
+              </AppButton>
+            </div>
+          </form>
+        </CardBody>
+      </Card>
     </div>
   );
 }

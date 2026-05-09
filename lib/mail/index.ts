@@ -32,7 +32,7 @@ async function sendWithResend(payload: MailPayload): Promise<MailResult> {
   const { Resend } = await import("resend");
   const resend = new Resend(process.env.RESEND_API_KEY);
 
-  const from = process.env.MAIL_FROM_ADDRESS ?? "ai9803245@gmail.com";
+  const from = process.env.MAIL_FROM_ADDRESS ?? "noreply@example.com";
   const to = Array.isArray(payload.to) ? payload.to : [payload.to];
 
   const { data, error } = await resend.emails.send({

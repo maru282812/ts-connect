@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  Button,
   Card,
   CardBody,
   CardHeader,
@@ -19,6 +18,7 @@ import {
   formSelectClasses,
 } from "@/components/common/FormField";
 import { PageHeader } from "@/components/common/PageHeader";
+import { AppButton } from "@/components/ui/AppButton";
 import { FormField } from "@/components/ui/FormField";
 import { createClient } from "@/lib/supabase/client";
 import type { Company } from "@/types/database";
@@ -210,14 +210,9 @@ export function MyPageContent() {
                   </Select>
                 </FormField>
                 <div className="flex justify-end pt-2">
-                  <Button
-                    type="submit"
-                    color="primary"
-                    isLoading={isProfileLoading}
-                    className="min-w-28"
-                  >
+                  <AppButton type="submit" isLoading={isProfileLoading}>
                     保存する
-                  </Button>
+                  </AppButton>
                 </div>
               </form>
             </CardBody>
@@ -270,14 +265,9 @@ export function MyPageContent() {
                   />
                 </FormField>
                 <div className="flex justify-end pt-2">
-                  <Button
-                    type="submit"
-                    color="primary"
-                    isLoading={isPasswordLoading}
-                    className="min-w-28"
-                  >
+                  <AppButton type="submit" isLoading={isPasswordLoading}>
                     変更する
-                  </Button>
+                  </AppButton>
                 </div>
               </form>
             </CardBody>

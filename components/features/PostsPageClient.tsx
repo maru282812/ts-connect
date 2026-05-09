@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { PostDetailPane } from "@/components/features/PostDetailPane";
 import { PostListItem } from "@/components/features/PostListItem";
+import { AppButton } from "@/components/ui/AppButton";
 import { createClient } from "@/lib/supabase/client";
 import type {
   ApplicationType,
@@ -18,7 +19,7 @@ type TabType = "ALL" | PostType;
 const TABS: { key: TabType; label: string; color: string }[] = [
   { key: "ALL", label: "すべて", color: "bg-default-300" },
   { key: "OFFICIAL", label: "公式案件", color: "bg-blue-500" },
-  { key: "CASUAL", label: "気軽に投稿", color: "bg-emerald-500" },
+  { key: "CASUAL", label: "気軽に投稿", color: "bg-green-500" },
 ];
 
 interface PostsPageClientProps {
@@ -75,6 +76,22 @@ function CheckIcon() {
       strokeWidth="3"
     >
       <polyline points="20 6 9 17 4 12" />
+    </svg>
+  );
+}
+
+function PlusIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="h-4 w-4"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      viewBox="0 0 24 24"
+    >
+      <path d="M12 5v14" />
+      <path d="M5 12h14" />
     </svg>
   );
 }
@@ -323,15 +340,14 @@ export function PostsPageClient({
             </p>
           </div>
           {newPostHref && (
-            <Button
+            <AppButton
               as={Link}
               href={newPostHref}
-              color="primary"
-              size="sm"
               className="shrink-0"
+              startContent={<PlusIcon />}
             >
-              + 気軽に投稿
-            </Button>
+              気軽に投稿
+            </AppButton>
           )}
         </div>
 

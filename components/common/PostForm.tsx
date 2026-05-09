@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  Button,
   Card,
   CardBody,
   CardHeader,
@@ -19,6 +18,7 @@ import {
   formTextareaClasses,
 } from "@/components/common/FormField";
 import { FormField } from "@/components/ui/FormField";
+import { AppButton } from "@/components/ui/AppButton";
 import { POST_STATUSES, isPublicStatus } from "@/lib/postStatus";
 import { createClient } from "@/lib/supabase/client";
 import type { Company, Post, PostStatus, PostType } from "@/types/database";
@@ -145,7 +145,8 @@ export function PostForm({ post, companies, defaultCompanyId }: PostFormProps) {
               onValueChange={setBody}
               isRequired
               placeholder="案件の詳細を入力してください"
-              minRows={6}
+              minRows={5}
+              maxRows={16}
               variant="bordered"
               classNames={formTextareaClasses}
             />
@@ -244,22 +245,21 @@ export function PostForm({ post, companies, defaultCompanyId }: PostFormProps) {
           </FormField>
 
           <div className="flex gap-3 pt-2">
-            <Button
+            <AppButton
               type="button"
-              variant="flat"
+              variantType="secondary"
               onPress={() => router.back()}
               className="flex-1"
             >
               キャンセル
-            </Button>
-            <Button
+            </AppButton>
+            <AppButton
               type="submit"
-              color="primary"
               isLoading={isLoading}
               className="flex-1"
             >
               {isEdit ? "更新する" : "作成する"}
-            </Button>
+            </AppButton>
           </div>
         </form>
       </CardBody>

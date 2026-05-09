@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  Button,
   Chip,
   Modal,
   ModalBody,
@@ -11,6 +10,7 @@ import {
   Textarea,
 } from "@heroui/react";
 import { useState } from "react";
+import { AppButton } from "@/components/ui/AppButton";
 import type { ApplicationType, Post } from "@/types/database";
 
 interface ApplicationModalProps {
@@ -110,16 +110,20 @@ export function ApplicationModal({
           </p>
         </ModalBody>
         <ModalFooter>
-          <Button variant="flat" onPress={onClose} isDisabled={isLoading}>
+          <AppButton
+            variantType="secondary"
+            onPress={onClose}
+            isDisabled={isLoading}
+          >
             キャンセル
-          </Button>
-          <Button
-            color={applicationType === "INQUIRY" ? "secondary" : "primary"}
+          </AppButton>
+          <AppButton
+            variantType={applicationType === "INQUIRY" ? "sub" : "primary"}
             onPress={handleSubmit}
             isLoading={isLoading}
           >
             {typeLabel}を送信する
-          </Button>
+          </AppButton>
         </ModalFooter>
       </ModalContent>
     </Modal>

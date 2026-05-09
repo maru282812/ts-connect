@@ -21,6 +21,7 @@ type PostForNotification = {
   post_type: PostType;
   post_status: string;
   created_by_user_id: string;
+  company_id: string;
   creator?: {
     id: string;
     email: string | null;
@@ -67,7 +68,7 @@ export async function POST(request: Request) {
     const { data: postData, error: postError } = await admin
       .from("posts")
       .select(
-        "id, title, post_type, post_status, created_by_user_id, creator:created_by_user_id(id, email, display_name)",
+        "id, title, post_type, post_status, created_by_user_id, company_id, creator:created_by_user_id(id, email, display_name)",
       )
       .eq("id", post_id)
       .in("post_status", ["OPEN", "IN_PROGRESS"])
@@ -152,16 +153,31 @@ export async function POST(request: Request) {
       );
     }
 
+    // 通知先メール優先順位:
+    // 1. companies.notification_email
+    // 2. 投稿者のメールアドレス
+    // 3. ログインユーザーのメールアドレス
+    const { data: companyData } = await admin
+      .from("companies")
+      .select("notification_email")
+      .eq("id", post.company_id)
+      .single();
+
     const creator = normalizeCreator(
       post.creator as
         | PostForNotification["creator"]
         | PostForNotification["creator"][],
     );
-    const creatorEmail = creator?.email;
+    const notificationEmail =
+      companyData?.notification_email ||
+      creator?.email ||
+      applicantEmail ||
+      null;
 
-    if (!creatorEmail) {
-      console.warn("[MAIL] Post creator email was not found.", {
+    if (!notificationEmail) {
+      console.warn("[MAIL] No notification email found.", {
         postId: post.id,
+        companyId: post.company_id,
         createdByUserId: post.created_by_user_id,
       });
     } else {
@@ -177,7 +193,7 @@ export async function POST(request: Request) {
       };
 
       const mailResult = await sendMail({
-        to: creatorEmail,
+        to: notificationEmail,
         subject: buildApplicationEmailSubject(post.title),
         html: buildApplicationEmailHtml(emailData),
         text: buildApplicationEmailText(emailData),

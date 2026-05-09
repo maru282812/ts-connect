@@ -1,14 +1,15 @@
 "use client";
 
-import { Button, Input, Select, SelectItem, Textarea } from "@heroui/react";
+import { Input, Select, SelectItem } from "@heroui/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
   formInputClasses,
   formSelectClasses,
-  formTextareaClasses,
 } from "@/components/common/FormField";
 import { ThumbnailInput } from "@/components/common/ThumbnailInput";
+import { AppButton } from "@/components/ui/AppButton";
+import { AutoResizeTextarea } from "@/components/ui/AutoResizeTextarea";
 import { FormField } from "@/components/ui/FormField";
 import { CASUAL_POST_STATUSES, isPublicStatus } from "@/lib/postStatus";
 import { createClient } from "@/lib/supabase/client";
@@ -269,15 +270,12 @@ export function NewCasualPostForm({
             </FormField>
 
             <FormField label="本文" required>
-              <Textarea
+              <AutoResizeTextarea
                 value={body}
                 onValueChange={setBody}
                 isRequired
                 placeholder="詳細を書いてください。相談・告知・募集など何でもOKです"
-                minRows={7}
-                maxRows={16}
-                variant="bordered"
-                classNames={formTextareaClasses}
+                minRows={5}
               />
             </FormField>
 
@@ -344,22 +342,19 @@ export function NewCasualPostForm({
 
           {/* フッターボタン */}
           <div className="px-8 py-5 bg-slate-50 border-t border-slate-100 flex gap-3 justify-end">
-            <Button
+            <AppButton
               type="button"
-              variant="flat"
+              variantType="secondary"
               onPress={() => router.push(resolvedCancelPath)}
-              className="min-w-28"
             >
               キャンセル
-            </Button>
-            <Button
+            </AppButton>
+            <AppButton
               type="submit"
-              color="primary"
               isLoading={isLoading}
-              className="min-w-28"
             >
               {submitLabel}
-            </Button>
+            </AppButton>
           </div>
         </form>
       </div>

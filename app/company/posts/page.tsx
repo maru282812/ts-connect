@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 
 export default async function AdminPostsPage() {
   const supabase = await createClient();
-  const { userId, isMasterAdmin, companyId } = await getAdminContext();
+  const { userId, isMasterAdmin, companyId, companyIds } = await getAdminContext();
 
   // ADMIN が会社に所属していない場合は設定不備として早期リターン
   if (!isMasterAdmin && !companyId) {
@@ -23,13 +23,21 @@ export default async function AdminPostsPage() {
     );
   }
 
-  // RLS が ADMIN=所属会社のみ / MASTER_ADMIN=全件 を自動適用する
-  const { data: posts, error } = await supabase
+  // ADMIN=所属会社のみ / MASTER_ADMIN=全件
+  // RLS の SELECT ポリシーは OPEN/IN_PROGRESS なら全社分を許可しているため、
+  // ここで明示的に company_id を絞る。
+  let postsQuery = supabase
     .from("posts")
     .select(
       "id, title, post_type, post_status, thumbnail_url, updated_at, created_by_user_id",
     )
     .order("updated_at", { ascending: false });
+
+  if (!isMasterAdmin) {
+    postsQuery = postsQuery.in("company_id", companyIds);
+  }
+
+  const { data: posts, error } = await postsQuery;
 
   if (error) {
     return (

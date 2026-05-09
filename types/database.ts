@@ -31,6 +31,10 @@ export interface User {
 export interface Company {
   id: string;
   name: string;
+  notification_email: string | null;
+  notification_enabled: boolean;
+  description: string | null;
+  logo_url: string | null;
   created_at: string;
   updated_at: string;
 }

@@ -20,6 +20,37 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
+function SendIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="h-4 w-4"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      viewBox="0 0 24 24"
+    >
+      <path d="M5 12h14" />
+      <path d="m13 6 6 6-6 6" />
+    </svg>
+  );
+}
+
+function MessageIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="h-4 w-4"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      viewBox="0 0 24 24"
+    >
+      <path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z" />
+    </svg>
+  );
+}
+
 export function PostDetailPane({
   post,
   onApplicationSuccess,
@@ -32,6 +63,17 @@ export function PostDetailPane({
 
   const isOfficial = post.post_type === "OFFICIAL";
   const companyName = post.companies?.name ?? "会社不明";
+  const actionButtonBase =
+    "flex-1 min-w-[140px] h-10 px-6 rounded-full text-sm font-medium";
+  const primaryActionClass = isOfficial
+    ? "bg-blue-600 hover:bg-blue-700 text-white shadow-sm"
+    : "bg-green-600 hover:bg-green-700 text-white shadow-sm";
+  const subActionClass = isOfficial
+    ? "border-blue-300 text-blue-600 hover:bg-blue-50"
+    : "border-green-300 text-green-600 hover:bg-green-50";
+  const disabledActionClass = isOfficial
+    ? "bg-blue-50 text-blue-400"
+    : "bg-green-50 text-green-500";
 
   const deadline = post.deadline_at
     ? new Date(post.deadline_at).toLocaleDateString("ja-JP")
@@ -130,12 +172,12 @@ export function PostDetailPane({
           <p className="text-sm text-default-500 mb-3">{companyName}</p>
 
           {/* アクションボタン */}
-          <div className="flex gap-2 w-full">
+          <div className="flex gap-3 w-full flex-wrap">
             {appliedTypes.has("APPLY") ? (
               <Button
                 color="default"
                 size="md"
-                className="flex-1 bg-default-100 text-default-400"
+                className={`${actionButtonBase} ${disabledActionClass}`}
                 isDisabled
                 variant="flat"
                 style={{ cursor: "default", pointerEvents: "none" }}
@@ -144,20 +186,20 @@ export function PostDetailPane({
               </Button>
             ) : (
               <Button
-                color="primary"
                 size="md"
                 onPress={() => setModalType("APPLY")}
-                className="flex-1"
+                className={`${actionButtonBase} ${primaryActionClass}`}
                 variant="solid"
+                startContent={<SendIcon />}
               >
-                {isOfficial ? "応募する" : "参加希望"}
+                応募する
               </Button>
             )}
             {appliedTypes.has("INQUIRY") ? (
               <Button
                 color="default"
                 size="md"
-                className="flex-1 bg-default-100 text-default-400"
+                className={`${actionButtonBase} ${disabledActionClass}`}
                 isDisabled
                 variant="flat"
                 style={{ cursor: "default", pointerEvents: "none" }}
@@ -166,11 +208,11 @@ export function PostDetailPane({
               </Button>
             ) : (
               <Button
-                color="secondary"
                 variant="bordered"
                 size="md"
                 onPress={() => setModalType("INQUIRY")}
-                className="flex-1"
+                className={`${actionButtonBase} ${subActionClass}`}
+                startContent={<MessageIcon />}
               >
                 聞いてみる
               </Button>

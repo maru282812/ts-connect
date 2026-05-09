@@ -21,15 +21,22 @@ const typeLabelMap: Record<PostType, string> = {
 
 export default async function ArchivedPostsPage() {
   const supabase = await createClient();
-  const { userId, isMasterAdmin } = await getAdminContext();
+  const { userId, isMasterAdmin, companyIds } = await getAdminContext();
 
-  const { data: posts, error } = await supabase
+  // ADMIN=所属会社のみ / MASTER_ADMIN=全件
+  let postsQuery = supabase
     .from("posts")
     .select(
       "*, companies(id, name), users:created_by_user_id(id, display_name, email)",
     )
     .eq("post_status", "CLOSED")
     .order("closed_at", { ascending: false });
+
+  if (!isMasterAdmin) {
+    postsQuery = postsQuery.in("company_id", companyIds);
+  }
+
+  const { data: posts, error } = await postsQuery;
 
   if (error) {
     return (

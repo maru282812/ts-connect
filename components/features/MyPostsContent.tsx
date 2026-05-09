@@ -4,6 +4,7 @@ import { Button } from "@heroui/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { PostStatusBadge } from "@/components/admin/PostStatusBadge";
+import { PostThumbnail } from "@/components/admin/PostThumbnail";
 import { PostTypeBadge } from "@/components/admin/PostTypeBadge";
 import { createClient } from "@/lib/supabase/client";
 import type { PostWithRelations } from "@/types/database";
@@ -85,23 +86,26 @@ export function MyPostsContent({ editBasePath, successParam }: MyPostsContentPro
       )}
 
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-        <table className="w-full text-sm">
+        <table className="w-full text-sm table-fixed">
           <thead>
             <tr className="border-b border-slate-100 bg-slate-50">
-              <th className="text-left px-4 py-3 text-xs font-medium text-default-500">
+              <th className="text-left px-3 py-3 text-xs font-medium text-default-500 w-14">
+                サムネ
+              </th>
+              <th className="text-left px-3 py-3 text-xs font-medium text-default-500">
                 タイトル
               </th>
-              <th className="text-left px-4 py-3 text-xs font-medium text-default-500 w-20">
+              <th className="text-left px-2 py-3 text-xs font-medium text-default-500 w-20">
                 種別
               </th>
-              <th className="text-left px-4 py-3 text-xs font-medium text-default-500 w-24">
+              <th className="text-left px-2 py-3 text-xs font-medium text-default-500 w-24">
                 ステータス
               </th>
-              <th className="text-left px-4 py-3 text-xs font-medium text-default-500 w-28">
+              <th className="text-left px-2 py-3 text-xs font-medium text-default-500 w-24">
                 更新日
               </th>
               {editBasePath && (
-                <th className="text-left px-4 py-3 text-xs font-medium text-default-500 w-20">
+                <th className="text-center px-2 py-3 text-xs font-medium text-default-500 w-16">
                   操作
                 </th>
               )}
@@ -113,7 +117,15 @@ export function MyPostsContent({ editBasePath, successParam }: MyPostsContentPro
                 key={post.id}
                 className="border-b last:border-0 hover:bg-slate-50 transition-colors border-slate-100"
               >
-                <td className="px-4 py-3">
+                <td className="px-3 py-3 align-middle">
+                  <PostThumbnail
+                    thumbnailUrl={post.thumbnail_url}
+                    title={post.title}
+                    type={post.post_type}
+                    size="sm"
+                  />
+                </td>
+                <td className="px-3 py-3 align-middle">
                   <span className="font-medium text-default-800 line-clamp-2">
                     {post.title}
                   </span>
@@ -121,28 +133,27 @@ export function MyPostsContent({ editBasePath, successParam }: MyPostsContentPro
                     {post.companies?.name ?? "未設定"}
                   </p>
                 </td>
-                <td className="px-4 py-3">
+                <td className="px-2 py-3 align-middle">
                   <PostTypeBadge type={post.post_type} />
                 </td>
-                <td className="px-4 py-3">
+                <td className="px-2 py-3 align-middle">
                   <PostStatusBadge status={post.post_status} />
                 </td>
-                <td className="px-4 py-3 text-xs text-default-400">
+                <td className="px-2 py-3 align-middle text-xs text-default-400 whitespace-nowrap">
                   {new Date(post.updated_at).toLocaleDateString("ja-JP")}
                 </td>
                 {editBasePath && (
-                  <td className="px-4 py-3">
-                    {post.post_type === "CASUAL" && (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onPress={() =>
-                          router.push(`${editBasePath}/${post.id}/edit`)
-                        }
-                      >
-                        編集
-                      </Button>
-                    )}
+                  <td className="px-2 py-3 align-middle text-center">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onPress={() =>
+                        router.push(`${editBasePath}/${post.id}/edit`)
+                      }
+                      className="whitespace-nowrap"
+                    >
+                      編集
+                    </Button>
                   </td>
                 )}
               </tr>

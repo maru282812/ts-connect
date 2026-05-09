@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  Button,
   Card,
   CardBody,
   CardFooter,
@@ -9,6 +8,7 @@ import {
   Chip,
 } from "@heroui/react";
 import Link from "next/link";
+import { AppButton } from "@/components/ui/AppButton";
 import { POST_STATUS_CHIP_COLOR, POST_STATUS_LABELS } from "@/lib/postStatus";
 import type { PostWithRelations } from "@/types/database";
 
@@ -66,16 +66,14 @@ export function PostCard({ post, href }: PostCardProps) {
         </div>
       </CardBody>
       <CardFooter className="pt-2">
-        <Button
+        <AppButton
           as={Link}
           href={href}
-          color="primary"
-          variant="flat"
-          size="sm"
+          variantType="sub"
           className="w-full"
         >
           詳細を見る
-        </Button>
+        </AppButton>
       </CardFooter>
     </Card>
   );

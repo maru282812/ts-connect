@@ -1,14 +1,15 @@
 "use client";
 
-import { Button, Input, Select, SelectItem, Textarea } from "@heroui/react";
+import { Input, Select, SelectItem } from "@heroui/react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import {
   formInputClasses,
   formSelectClasses,
-  formTextareaClasses,
 } from "@/components/common/FormField";
 import { ThumbnailInput } from "@/components/common/ThumbnailInput";
+import { AppButton } from "@/components/ui/AppButton";
+import { AutoResizeTextarea } from "@/components/ui/AutoResizeTextarea";
 import { FormField } from "@/components/ui/FormField";
 import { isPublicStatus, POST_STATUSES } from "@/lib/postStatus";
 import { createClient } from "@/lib/supabase/client";
@@ -193,14 +194,12 @@ export function OfficialPostForm({
         <SectionHeading>案件内容</SectionHeading>
 
         <FormField label="案件内容" required>
-          <Textarea
+          <AutoResizeTextarea
             value={body}
             onValueChange={setBody}
             isRequired
             placeholder="案件の詳細を入力してください"
-            minRows={6}
-            variant="bordered"
-            classNames={formTextareaClasses}
+            minRows={5}
           />
         </FormField>
       </div>
@@ -210,14 +209,12 @@ export function OfficialPostForm({
         <SectionHeading>募集条件</SectionHeading>
 
         <FormField label="募集条件" required>
-          <Textarea
+          <AutoResizeTextarea
             value={requirements}
             onValueChange={setRequirements}
             isRequired
             placeholder="応募に必要なスキル・条件を入力してください"
-            minRows={4}
-            variant="bordered"
-            classNames={formTextareaClasses}
+            minRows={5}
           />
         </FormField>
       </div>
@@ -287,21 +284,21 @@ export function OfficialPostForm({
       </div>
 
       <div className="flex gap-3 pt-2">
-        <Button
+        <AppButton
           type="button"
-          variant="flat"
+          variantType="secondary"
           onPress={() => router.back()}
           className="flex-1"
         >
           キャンセル
-        </Button>
-        <Button
+        </AppButton>
+        <AppButton
           type="submit"
           isLoading={isLoading}
-          className="flex-1 bg-blue-800 text-white hover:bg-blue-900"
+          className="flex-1"
         >
           {isEdit ? "更新する" : "投稿する"}
-        </Button>
+        </AppButton>
       </div>
     </form>
   );

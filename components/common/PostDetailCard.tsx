@@ -26,6 +26,37 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
+function SendIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="h-4 w-4"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      viewBox="0 0 24 24"
+    >
+      <path d="M5 12h14" />
+      <path d="m13 6 6 6-6 6" />
+    </svg>
+  );
+}
+
+function MessageIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="h-4 w-4"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      viewBox="0 0 24 24"
+    >
+      <path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z" />
+    </svg>
+  );
+}
+
 export function PostDetailCard({
   post,
   onApply,
@@ -33,6 +64,14 @@ export function PostDetailCard({
   readonly = false,
 }: PostDetailCardProps) {
   const isOfficial = post.post_type === "OFFICIAL";
+  const actionButtonBase =
+    "flex-1 min-w-[140px] h-10 px-6 rounded-full text-sm font-medium";
+  const primaryActionClass = isOfficial
+    ? "bg-blue-600 hover:bg-blue-700 text-white shadow-sm"
+    : "bg-green-600 hover:bg-green-700 text-white shadow-sm";
+  const subActionClass = isOfficial
+    ? "border-blue-300 text-blue-600 hover:bg-blue-50"
+    : "border-green-300 text-green-600 hover:bg-green-50";
 
   const deadline = post.deadline_at
     ? new Date(post.deadline_at).toLocaleDateString("ja-JP")
@@ -42,13 +81,31 @@ export function PostDetailCard({
     <Card className="w-full" shadow="sm">
       {/* ── 基本情報 ── */}
       <CardHeader className="flex flex-col items-start gap-3 pb-4">
-        {post.thumbnail_url && (
+        {post.thumbnail_url ? (
+          // eslint-disable-next-line @next/next/no-img-element
           <img
             src={post.thumbnail_url}
             alt="サムネイル"
-            className="w-full h-40 object-cover rounded-lg"
-            onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+            className="w-full h-40 object-cover rounded-lg shadow-sm"
+            onError={(e) => {
+              (e.currentTarget as HTMLImageElement).style.display = "none";
+            }}
           />
+        ) : (
+          <div
+            className={`w-full h-40 rounded-lg shadow-sm flex flex-col items-center justify-center gap-2 px-4 ${
+              isOfficial
+                ? "bg-blue-50 text-blue-700"
+                : "bg-green-50 text-green-700"
+            }`}
+          >
+            <span className="text-sm font-medium">
+              {isOfficial ? "公式案件" : "気軽に投稿"}
+            </span>
+            <span className="text-lg font-bold text-center line-clamp-2 leading-snug">
+              {post.title}
+            </span>
+          </div>
         )}
 
         <div className="flex items-start justify-between w-full gap-3">
@@ -152,23 +209,24 @@ export function PostDetailCard({
             <div className="flex gap-3 flex-wrap">
               {onApply && (
                 <Button
-                  color="primary"
                   size="md"
                   onPress={onApply}
-                  className="flex-1 min-w-[140px]"
+                  className={`${actionButtonBase} ${primaryActionClass}`}
+                  variant="solid"
+                  startContent={<SendIcon />}
                 >
                   応募する
                 </Button>
               )}
               {onInquiry && (
                 <Button
-                  color="secondary"
-                  variant="flat"
+                  variant="bordered"
                   size="md"
                   onPress={onInquiry}
-                  className="flex-1 min-w-[140px]"
+                  className={`${actionButtonBase} ${subActionClass}`}
+                  startContent={<MessageIcon />}
                 >
-                  問い合わせる
+                  聞いてみる
                 </Button>
               )}
             </div>

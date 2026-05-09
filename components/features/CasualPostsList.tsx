@@ -1,12 +1,12 @@
 "use client";
 
-import { Button } from "@heroui/react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { PostStatusBadge } from "@/components/admin/PostStatusBadge";
 import { PageHeader } from "@/components/common/PageHeader";
 import { PostCard } from "@/components/common/PostCard";
 import { SearchBar } from "@/components/common/SearchBar";
+import { AppButton } from "@/components/ui/AppButton";
 import { createClient } from "@/lib/supabase/client";
 import type { PostWithRelations } from "@/types/database";
 
@@ -49,13 +49,21 @@ export function CasualPostsList({
       } = await supabase.auth.getUser();
       setCurrentUserId(user?.id ?? null);
 
+      let currentIsMasterAdmin = false;
+      let currentCompanyIds: string[] = [];
+
       if (mode === "admin" && user) {
-        const { data: profile } = await supabase
-          .from("users")
-          .select("system_role")
-          .eq("id", user.id)
-          .single();
-        setIsMasterAdmin(profile?.system_role === "MASTER_ADMIN");
+        const [{ data: profile }, { data: memberships }] = await Promise.all([
+          supabase.from("users").select("system_role").eq("id", user.id).single(),
+          supabase
+            .from("company_members")
+            .select("company_id")
+            .eq("user_id", user.id)
+            .eq("status", "active"),
+        ]);
+        currentIsMasterAdmin = profile?.system_role === "MASTER_ADMIN";
+        currentCompanyIds = memberships?.map((m) => m.company_id) ?? [];
+        setIsMasterAdmin(currentIsMasterAdmin);
       }
 
       let query = supabase
@@ -69,6 +77,11 @@ export function CasualPostsList({
       // userモードはOPEN/IN_PROGRESSを表示（RLSポリシーと同期）
       if (mode === "user") {
         query = query.in("post_status", ["OPEN", "IN_PROGRESS"]);
+      }
+
+      // adminモードかつMASTER_ADMIN以外は所属会社のみ表示
+      if (mode === "admin" && !currentIsMasterAdmin && currentCompanyIds.length > 0) {
+        query = query.in("company_id", currentCompanyIds);
       }
 
       if (search.trim()) {
@@ -95,9 +108,9 @@ export function CasualPostsList({
         title="気軽に投稿"
         description="ユーザーが気軽に投稿・共有するコーナー"
         actions={
-          <Button as={Link} href={resolvedNewPath} color="primary" size="sm">
+          <AppButton as={Link} href={resolvedNewPath}>
             + 新規作成
-          </Button>
+          </AppButton>
         }
       />
 
@@ -141,15 +154,14 @@ export function CasualPostsList({
       ) : posts.length === 0 ? (
         <div className="text-center py-16 text-default-400">
           <p className="text-lg">投稿が見つかりませんでした</p>
-          <Button
+          <AppButton
             as={Link}
             href={resolvedNewPath}
-            color="primary"
-            variant="flat"
+            variantType="sub"
             className="mt-4"
           >
             最初の投稿を作成する
-          </Button>
+          </AppButton>
         </div>
       ) : mode === "user" ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

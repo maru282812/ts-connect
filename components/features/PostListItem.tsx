@@ -30,7 +30,7 @@ export function PostListItem({
     <div
       onClick={onClick}
       className={`
-        flex flex-col rounded-xl cursor-pointer overflow-hidden select-none
+        flex flex-col rounded-lg cursor-pointer overflow-hidden select-none
         transition-all duration-200
         ${
           isSelected
@@ -51,22 +51,22 @@ export function PostListItem({
             src={post.thumbnail_url}
             alt={post.title}
             className="w-full h-full object-cover"
-            style={{ borderRadius: "12px 12px 0 0" }}
+            style={{ borderRadius: "8px 8px 0 0" }}
             onError={() => setImgError(true)}
           />
         ) : (
           <div
             className={`w-full h-full flex flex-col items-center justify-center gap-1 px-3
-              ${isOfficial ? "bg-blue-700" : "bg-emerald-500"}`}
-            style={{ borderRadius: "12px 12px 0 0" }}
+              ${isOfficial ? "bg-blue-50 text-blue-700" : "bg-green-50 text-green-700"}`}
+            style={{ borderRadius: "8px 8px 0 0" }}
           >
             <span
-              className="text-white/60 font-medium"
+              className="font-medium"
               style={{ fontSize: "10px" }}
             >
               {isOfficial ? "公式案件" : "気軽に投稿"}
             </span>
-            <span className="text-white font-bold text-xs text-center line-clamp-2 leading-snug">
+            <span className="font-bold text-xs text-center line-clamp-2 leading-snug">
               {post.title}
             </span>
           </div>

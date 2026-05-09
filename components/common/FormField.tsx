@@ -27,8 +27,8 @@ export const formInputClasses = {
 } as const;
 
 export const formTextareaClasses = {
-  inputWrapper: "border-slate-300 hover:border-slate-400 bg-white",
-  input: "text-base leading-relaxed py-2",
+  inputWrapper: "border-slate-300 hover:border-slate-400 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/20 bg-white rounded-md",
+  input: "text-base leading-relaxed py-2 resize-none",
 } as const;
 
 export const formSelectClasses = {
