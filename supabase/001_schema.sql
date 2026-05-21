@@ -4,6 +4,13 @@
 -- 空の Supabase プロジェクトに一発適用して完成形 DB を構築する。
 --
 -- 適用順: このファイル → 002_seed_dev.sql (任意)
+--
+-- 統合済みパッチ:
+--   003_company_members_permissions.sql  (Section 5, 8)
+--   004_service_role_grants.sql          (Section 5)
+--   006_fix_email_trigger.sql            (Section 3, 13)
+--
+-- 注: 005_fix_email_sync.sql は既存環境向け補正であり、このファイルには含めない
 -- ============================================================
 
 -- ============================================================
@@ -12,21 +19,23 @@
 
 -- ── users ──────────────────────────────────────────────────
 create table if not exists public.users (
-  id             uuid        primary key references auth.users(id) on delete cascade,
-  email          text        unique not null,
-  display_name   text        not null,
-  system_role    text        not null default 'USER'
-                             check (system_role in ('USER', 'ADMIN', 'MASTER_ADMIN')),
-  account_status text        not null default 'ACTIVE'
-                             check (account_status in ('ACTIVE', 'PRO', 'SUSPENDED')),
-  created_at     timestamptz not null default now(),
-  updated_at     timestamptz not null default now()
+  id                 uuid        primary key references auth.users(id) on delete cascade,
+  email              text        unique not null,
+  display_name       text        not null,
+  notification_email text,
+  system_role        text        not null default 'USER'
+                                 check (system_role in ('USER', 'ADMIN', 'MASTER_ADMIN')),
+  account_status     text        not null default 'ACTIVE'
+                                 check (account_status in ('ACTIVE', 'PRO', 'SUSPENDED')),
+  created_at         timestamptz not null default now(),
+  updated_at         timestamptz not null default now()
 );
 
 -- ── companies ──────────────────────────────────────────────
 create table if not exists public.companies (
   id                   uuid        primary key default gen_random_uuid(),
   name                 text        not null,
+  email                text,
   notification_email   text,
   notification_enabled boolean     not null default true,
   description          text,
@@ -125,10 +134,9 @@ returns text as $$
 $$ language sql security definer stable set search_path = public;
 
 grant execute on function public.get_user_role() to authenticated;
-grant execute on function public.get_user_role() to anon;
 grant execute on function public.get_user_role() to service_role;
 
--- ── get_user_company_ids: ADMIN が active 所属する会社 ID 配列 ─
+-- ── get_user_company_ids: active 所属会社 ID の配列を返す ───
 create or replace function public.get_user_company_ids()
 returns uuid[] as $$
   select coalesce(array_agg(company_id), array[]::uuid[])
@@ -138,7 +146,6 @@ returns uuid[] as $$
 $$ language sql security definer stable set search_path = public;
 
 grant execute on function public.get_user_company_ids() to authenticated;
-grant execute on function public.get_user_company_ids() to anon;
 grant execute on function public.get_user_company_ids() to service_role;
 
 -- ── handle_new_user: auth.users 作成時に public.users を自動挿入 ─
@@ -226,6 +233,31 @@ create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function public.handle_new_user();
 
+-- ── handle_auth_user_email_updated: auth email 確定後に public.users を同期 ─
+create or replace function public.handle_auth_user_email_updated()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  update public.users
+     set email      = new.email,
+         updated_at = now()
+   where id = new.id
+     and email is distinct from new.email;
+  return new;
+end;
+$$;
+
+drop trigger if exists on_auth_user_email_updated on auth.users;
+
+create trigger on_auth_user_email_updated
+  after update of email on auth.users
+  for each row
+  when (old.email is distinct from new.email)
+  execute function public.handle_auth_user_email_updated();
+
 -- ============================================================
 -- 4. RLS 有効化
 -- ============================================================
@@ -237,7 +269,49 @@ alter table public.posts           enable row level security;
 alter table public.applications    enable row level security;
 
 -- ============================================================
--- 5. RLS ポリシー: users
+-- 5. GRANTS
+-- ============================================================
+-- GRANT は「テーブルへの入口」のみを開ける。
+-- 行レベルの制御は Section 6〜10 の RLS ポリシーが担う。
+--
+-- 切り分け方:
+--   permission denied → GRANT 不足（RLS に到達していない）
+--   0件取得 / エラー  → RLS ポリシー不足（GRANT は通過済み）
+--
+-- anon（未ログイン）には一切付与しない。
+-- service_role: API Route 内の admin client（service role key）が使用する。
+--   新形式キー（sb_secret_xxx）では明示的 GRANT が必要。
+--   RLS は BYPASSRLS 属性でスキップされるが、テーブル GRANT は別途必要。
+
+-- service_role: 全テーブルへの全操作権限（RLS バイパスで使用する管理用ロール）
+GRANT ALL ON public.users           TO service_role;
+GRANT ALL ON public.companies       TO service_role;
+GRANT ALL ON public.company_members TO service_role;
+GRANT ALL ON public.posts           TO service_role;
+GRANT ALL ON public.applications    TO service_role;
+
+-- users: 参照（自分・管理者）／自分のプロフィール更新
+GRANT SELECT, UPDATE ON public.users TO authenticated;
+
+-- companies: 参照（全認証済み）／管理者が会社を作成・更新
+GRANT SELECT, INSERT, UPDATE ON public.companies TO authenticated;
+
+-- company_members: 参照・追加・削除（マイページでの会社所属変更に必要）
+GRANT SELECT, INSERT, DELETE ON public.company_members TO authenticated;
+
+-- posts: 参照・作成・更新（削除はアプリ動線なし）
+GRANT SELECT, INSERT, UPDATE ON public.posts TO authenticated;
+
+-- applications: 参照・作成・更新（削除はアプリ動線なし）
+GRANT SELECT, INSERT, UPDATE ON public.applications TO authenticated;
+
+-- ============================================================
+-- 6. RLS ポリシー: users
+--
+-- GRANT: SELECT, UPDATE
+-- 対応ポリシー:
+--   SELECT: 自分 / ADMIN・MASTER_ADMIN は全件
+--   UPDATE: 自分のみ
 -- ============================================================
 
 -- 自分のレコードを参照可能
@@ -253,55 +327,77 @@ create policy "users: update own" on public.users
   for update using (id = auth.uid());
 
 -- ============================================================
--- 6. RLS ポリシー: companies
+-- 7. RLS ポリシー: companies
+--
+-- GRANT: SELECT, INSERT, UPDATE（DELETE なし）
+-- 対応ポリシー:
+--   SELECT: 全認証済みユーザー
+--   INSERT: ADMIN / MASTER_ADMIN
+--   UPDATE: ADMIN / MASTER_ADMIN
 -- ============================================================
 
 -- 認証済み全ユーザーが会社名を参照可能（UI 表示に必要）
 create policy "companies: select all authenticated" on public.companies
   for select using (auth.role() = 'authenticated');
 
--- ADMIN / MASTER_ADMIN は INSERT / UPDATE / DELETE 可能
-create policy "companies: admin or master all" on public.companies
-  for all using (public.get_user_role() in ('ADMIN', 'MASTER_ADMIN'));
+-- ADMIN / MASTER_ADMIN: 会社を作成可能
+create policy "companies: admin or master insert" on public.companies
+  for insert with check (public.get_user_role() in ('ADMIN', 'MASTER_ADMIN'));
+
+-- ADMIN / MASTER_ADMIN: 会社情報を更新可能
+create policy "companies: admin or master update" on public.companies
+  for update
+  using  (public.get_user_role() in ('ADMIN', 'MASTER_ADMIN'))
+  with check (public.get_user_role() in ('ADMIN', 'MASTER_ADMIN'));
 
 -- ============================================================
--- 7. RLS ポリシー: company_members
+-- 8. RLS ポリシー: company_members
+--
+-- GRANT: SELECT のみ（INSERT / UPDATE / DELETE は現時点で不要）
+-- 対応ポリシー:
+--   SELECT: 自分の所属 / ADMIN は自社メンバー / MASTER_ADMIN は全件
 -- ============================================================
 
--- 自分の所属レコードを参照可能
+-- 自分の所属レコードを参照可能（全ロール共通）
 create policy "company_members: select own" on public.company_members
   for select using (user_id = auth.uid());
 
--- MASTER_ADMIN: 全 company_members を操作可能
-create policy "company_members: master_admin all" on public.company_members
-  for all
-  using  (public.get_user_role() = 'MASTER_ADMIN')
-  with check (public.get_user_role() = 'MASTER_ADMIN');
+-- MASTER_ADMIN: 全 company_members を参照可能
+create policy "company_members: master_admin select all" on public.company_members
+  for select using (public.get_user_role() = 'MASTER_ADMIN');
 
--- ADMIN: active 所属会社の company_members のみ操作可能
-create policy "company_members: admin own company" on public.company_members
-  for all
-  using (
-    public.get_user_role() = 'ADMIN'
-    and company_id = any(public.get_user_company_ids())
-  )
-  with check (
+-- ADMIN: active 所属会社の company_members を参照可能
+create policy "company_members: admin select own company" on public.company_members
+  for select using (
     public.get_user_role() = 'ADMIN'
     and company_id = any(public.get_user_company_ids())
   );
 
--- USER: 自分のレコードのみ INSERT / UPDATE / DELETE 可能
+-- 全認証済みユーザー: 自分の所属を追加可能（マイページでの会社設定に必要）
 create policy "company_members: user insert own" on public.company_members
   for insert with check (user_id = auth.uid());
 
-create policy "company_members: user update own" on public.company_members
-  for update using (user_id = auth.uid());
-
+-- 全認証済みユーザー: 自分の所属を削除可能（マイページでの会社変更に必要）
 create policy "company_members: user delete own" on public.company_members
   for delete using (user_id = auth.uid());
 
 -- ============================================================
--- 8. RLS ポリシー: posts
+-- 9. RLS ポリシー: posts
+--
+-- GRANT: SELECT, INSERT, UPDATE（DELETE なし）
+-- 対応ポリシー:
+--   SELECT:
+--     USER        → OPEN / IN_PROGRESS の全社投稿 + 自分の CASUAL 投稿
+--     ADMIN       → OPEN / IN_PROGRESS の全社投稿 + 自社の全ステータス投稿
+--     MASTER_ADMIN → 全件
+--   INSERT:
+--     USER        → CASUAL のみ・自分名義
+--     ADMIN       → active 所属会社・自分名義
+--     MASTER_ADMIN → 全件
+--   UPDATE:
+--     USER        → 自分の CASUAL 投稿のみ
+--     ADMIN       → 自分が作成した自社投稿のみ
+--     MASTER_ADMIN → 全件
 -- ============================================================
 
 -- USER: OPEN / IN_PROGRESS の投稿を閲覧可能（全社）
@@ -335,7 +431,7 @@ create policy "posts: user update own casual" on public.posts
     and created_by_user_id = auth.uid()
   );
 
--- MASTER_ADMIN: 全件操作可能
+-- MASTER_ADMIN: 全件操作可能（SELECT / INSERT / UPDATE）
 create policy "posts: master_admin all" on public.posts
   for all
   using  (public.get_user_role() = 'MASTER_ADMIN')
@@ -375,33 +471,48 @@ create policy "posts: admin update own" on public.posts
     and company_id = any(public.get_user_company_ids())
   );
 
--- ADMIN DELETE: 自分が投稿した（かつ active 所属会社）のみ
-create policy "posts: admin delete own" on public.posts
-  for delete using (
-    public.get_user_role() = 'ADMIN'
-    and created_by_user_id = auth.uid()
-    and company_id = any(public.get_user_company_ids())
-  );
-
 -- ============================================================
--- 9. RLS ポリシー: applications
+-- 10. RLS ポリシー: applications
+--
+-- GRANT: SELECT, INSERT, UPDATE（DELETE なし）
+-- 対応ポリシー:
+--   SELECT:
+--     応募者      → 自分の応募
+--     投稿オーナー → 自分の投稿に届いた応募（CASUAL 投稿 USER 含む）
+--     ADMIN       → active 所属会社の投稿への応募
+--     MASTER_ADMIN → 全件
+--   INSERT:
+--     全認証済み  → 自分名義のみ
+--   UPDATE:
+--     ADMIN       → active 所属会社の投稿への応募ステータス変更
+--     MASTER_ADMIN → 全件
 -- ============================================================
 
--- USER: 自分の応募のみ参照可能
-create policy "applications: user select own" on public.applications
+-- 応募者: 自分の応募を参照可能
+create policy "applications: applicant select own" on public.applications
   for select using (applicant_user_id = auth.uid());
 
--- USER: 応募作成可能（自分名義のみ）
-create policy "applications: user insert" on public.applications
+-- 投稿オーナー: 自分の投稿に届いた応募を参照可能
+-- （CASUAL 投稿を持つ USER が受信した応募を確認できるようにする）
+create policy "applications: post owner select" on public.applications
+  for select using (
+    post_id in (
+      select id from public.posts
+      where created_by_user_id = auth.uid()
+    )
+  );
+
+-- 応募作成: 自分名義のみ可能（ログインユーザー本人）
+create policy "applications: applicant insert" on public.applications
   for insert with check (applicant_user_id = auth.uid());
 
--- MASTER_ADMIN: 全件操作可能
+-- MASTER_ADMIN: 全件操作可能（SELECT / INSERT / UPDATE）
 create policy "applications: master_admin all" on public.applications
   for all
   using  (public.get_user_role() = 'MASTER_ADMIN')
   with check (public.get_user_role() = 'MASTER_ADMIN');
 
--- ADMIN SELECT: active 所属会社の投稿への応募のみ閲覧可能
+-- ADMIN SELECT: active 所属会社の投稿への応募を閲覧可能
 create policy "applications: admin select own company" on public.applications
   for select using (
     public.get_user_role() = 'ADMIN'
@@ -429,18 +540,8 @@ create policy "applications: admin update own company" on public.applications
     )
   );
 
--- ADMIN DELETE: active 所属会社の投稿への応募削除可能
-create policy "applications: admin delete own company" on public.applications
-  for delete using (
-    public.get_user_role() = 'ADMIN'
-    and post_id in (
-      select id from public.posts
-      where company_id = any(public.get_user_company_ids())
-    )
-  );
-
 -- ============================================================
--- 10. Storage
+-- 11. Storage
 -- ============================================================
 
 -- thumbnails バケット（公開バケット / 最大 5MB / 画像のみ）
@@ -488,7 +589,7 @@ create policy "thumbnails: public select"
   using (bucket_id = 'thumbnails');
 
 -- ============================================================
--- 11. companies 初期データ（会社マスタのみ）
+-- 12. companies 初期データ（会社マスタのみ）
 -- ============================================================
 -- 本番に近い構成で空 DB を作成する場合、company マスタは必要なため含める。
 -- users / posts / applications などの検証データは 002_seed_dev.sql で投入する。
@@ -501,3 +602,16 @@ insert into public.companies (id, name) values
   ('55555555-5555-5555-5555-555555555555', '株式会社TSHD'),
   ('66666666-6666-6666-6666-666666666666', '株式会社T''s Nexus Solution')
 on conflict (id) do nothing;
+
+-- ============================================================
+-- 13. email 補正（既存環境向け・新規 DB では no-op）
+-- ============================================================
+-- auth.users と public.users の email が乖離している場合に補正する。
+-- 新規 DB にはデータが存在しないため、このクエリは何も変更しない。
+
+update public.users pu
+   set email      = au.email,
+       updated_at = now()
+  from auth.users au
+ where pu.id = au.id
+   and pu.email is distinct from au.email;

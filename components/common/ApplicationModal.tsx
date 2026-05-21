@@ -9,7 +9,8 @@ import {
   ModalHeader,
   Textarea,
 } from "@heroui/react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { AppButton } from "@/components/ui/AppButton";
 import type { ApplicationType, Post } from "@/types/database";
 
@@ -26,8 +27,18 @@ function resolveTypeLabel(
   applicationType: ApplicationType,
 ): string {
   if (applicationType === "INQUIRY") return "聞いてみる";
-  // APPLY: 公式案件なら「応募」、気軽投稿なら「参加希望」
   return post.post_type === "OFFICIAL" ? "応募" : "参加希望";
+}
+
+function resolveSuccessMessage(
+  post: Post,
+  applicationType: ApplicationType,
+): string {
+  if (applicationType === "INQUIRY") {
+    return `「${post.title}」へのお問い合わせを送信しました`;
+  }
+  const label = post.post_type === "OFFICIAL" ? "応募" : "参加希望";
+  return `「${post.title}」への${label}を送信しました`;
 }
 
 export function ApplicationModal({
@@ -44,6 +55,7 @@ export function ApplicationModal({
   const typeLabel = resolveTypeLabel(post, applicationType);
 
   const handleSubmit = async () => {
+    console.log("[ApplicationModal] 送信ボタン押下:", { post_id: post.id, applicationType });
     setIsLoading(true);
     setError(null);
 
@@ -59,24 +71,46 @@ export function ApplicationModal({
       });
 
       const data = await res.json();
+      console.log("[ApplicationModal] API response:", res.status, data);
 
       if (!res.ok) {
-        setError(data.error ?? "エラーが発生しました");
+        const msg = data.error ?? "エラーが発生しました";
+        setError(msg);
+        toast.error(msg);
+        console.error("[ApplicationModal] API error:", res.status, data);
         return;
       }
 
+      console.log("[ApplicationModal] 応募成功:", data);
       setMessage("");
+      toast.success(resolveSuccessMessage(post, applicationType), {
+        description: "担当者からの連絡をお待ちください。",
+      });
       onSuccess();
       onClose();
-    } catch {
-      setError("ネットワークエラーが発生しました");
+    } catch (err) {
+      const msg = "ネットワークエラーが発生しました";
+      setError(msg);
+      toast.error(msg);
+      console.error("[ApplicationModal] Network error:", err);
     } finally {
       setIsLoading(false);
     }
   };
 
+  useEffect(() => {
+    if (!isOpen) {
+      setMessage("");
+      setError(null);
+    }
+  }, [isOpen]);
+
+  const handleClose = () => {
+    onClose();
+  };
+
   return (
-    <Modal isOpen={isOpen} onClose={onClose} size="md">
+    <Modal isOpen={isOpen} onClose={handleClose} size="md" placement="center">
       <ModalContent>
         <ModalHeader className="flex flex-col gap-1">
           <div className="flex items-center gap-2">
@@ -99,7 +133,7 @@ export function ApplicationModal({
           )}
           <Textarea
             label={`${typeLabel}メッセージ`}
-            placeholder={`${typeLabel}の内容を入力してください`}
+            placeholder={`${typeLabel}の内容を入力してください（任意）`}
             value={message}
             onValueChange={setMessage}
             minRows={4}
@@ -112,7 +146,7 @@ export function ApplicationModal({
         <ModalFooter>
           <AppButton
             variantType="secondary"
-            onPress={onClose}
+            onPress={handleClose}
             isDisabled={isLoading}
           >
             キャンセル

@@ -30,8 +30,14 @@ function formatDateTime(value: string): string {
   });
 }
 
-export function buildApplicationEmailSubject(postTitle: string): string {
-  return `【応募通知】${postTitle}`;
+export function buildApplicationEmailSubject(
+  postTitle: string,
+  applicationType?: ApplicationType,
+): string {
+  if (applicationType === "INQUIRY") {
+    return `【${APP_NAME}】案件について問い合わせがありました：${postTitle}`;
+  }
+  return `【${APP_NAME}】案件に応募がありました：${postTitle}`;
 }
 
 export function buildApplicationEmailHtml(data: ApplicationEmailData): string {

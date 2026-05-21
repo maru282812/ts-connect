@@ -10,3 +10,4 @@ codex-fix-dev.err.log
 codex-fix-dev.out.log
 # logs
 *.log
+.claude/settings.local.json

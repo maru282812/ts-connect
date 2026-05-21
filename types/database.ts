@@ -22,6 +22,7 @@ export interface User {
   id: string;
   email: string;
   display_name: string;
+  notification_email: string | null;
   system_role: SystemRole;
   account_status: AccountStatus;
   created_at: string;
@@ -31,6 +32,7 @@ export interface User {
 export interface Company {
   id: string;
   name: string;
+  email: string | null;
   notification_email: string | null;
   notification_enabled: boolean;
   description: string | null;

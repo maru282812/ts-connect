@@ -25,6 +25,7 @@ type PostForNotification = {
   creator?: {
     id: string;
     email: string | null;
+    notification_email: string | null;
     display_name: string | null;
   } | null;
 };
@@ -40,12 +41,15 @@ function normalizeCreator(
 }
 
 export async function POST(request: Request) {
+  console.log("[API /api/applications] POST リクエスト受信");
   try {
     const supabase = await createClient();
 
     const {
       data: { user },
     } = await supabase.auth.getUser();
+
+    console.log("[API] auth.getUser:", user ? `uid=${user.id} email=${user.email}` : "null (未認証)");
 
     if (!user) {
       return NextResponse.json(
@@ -56,6 +60,7 @@ export async function POST(request: Request) {
 
     const body = (await request.json()) as ApplicationRequestBody;
     const { post_id, message, application_type } = body;
+    console.log("[API] request body:", { post_id, application_type, message: message?.slice(0, 20) });
 
     if (!post_id || !isApplicationType(application_type)) {
       return NextResponse.json(
@@ -68,18 +73,20 @@ export async function POST(request: Request) {
     const { data: postData, error: postError } = await admin
       .from("posts")
       .select(
-        "id, title, post_type, post_status, created_by_user_id, company_id, creator:created_by_user_id(id, email, display_name)",
+        "id, title, post_type, post_status, created_by_user_id, company_id, creator:created_by_user_id(id, email, notification_email, display_name)",
       )
       .eq("id", post_id)
       .in("post_status", ["OPEN", "IN_PROGRESS"])
       .single();
 
     if (postError || !postData) {
+      console.error("[API] postError:", postError?.message, postError?.code, "| postData:", postData);
       return NextResponse.json(
         { error: "案件が見つからないか、応募できない状態です。" },
         { status: 404 },
       );
     }
+    console.log("[API] post取得成功:", { id: postData.id, status: (postData as unknown as {post_status: string}).post_status });
 
     const post = postData as unknown as PostForNotification;
 
@@ -128,6 +135,31 @@ export async function POST(request: Request) {
     const applicationStatus =
       application_type === "APPLY" ? "APPLIED" : "INQUIRY";
 
+    const { data: sequenceRows, error: sequenceError } = await admin
+      .from("applications")
+      .select("application_sequence")
+      .eq("post_id", post_id)
+      .order("application_sequence", {
+        ascending: false,
+        nullsFirst: false,
+      })
+      .limit(1);
+
+    if (sequenceError) {
+      console.error(
+        "[API] Failed to calculate application sequence:",
+        sequenceError,
+      );
+      return NextResponse.json(
+        { error: "応募の送信に失敗しました。" },
+        { status: 500 },
+      );
+    }
+
+    const nextApplicationSequence =
+      ((sequenceRows?.[0]?.application_sequence as number | null | undefined) ??
+        0) + 1;
+
     const { data: application, error: insertError } = await supabase
       .from("applications")
       .insert({
@@ -140,42 +172,36 @@ export async function POST(request: Request) {
         applicant_name_snapshot: applicantName,
         applicant_company_snapshot: applicantCompany,
         post_title_snapshot: post.title,
+        application_sequence: nextApplicationSequence,
         applied_at: appliedAt,
       })
       .select()
       .single();
 
     if (insertError) {
-      console.error("[API] Failed to create application:", insertError);
+      console.error("[API] INSERT失敗:", insertError.message, insertError.code, JSON.stringify(insertError));
       return NextResponse.json(
         { error: "応募の送信に失敗しました。" },
         { status: 500 },
       );
     }
+    console.log("[API] INSERT成功:", application?.id);
 
     // 通知先メール優先順位:
-    // 1. companies.notification_email
-    // 2. 投稿者のメールアドレス
-    // 3. ログインユーザーのメールアドレス
-    const { data: companyData } = await admin
-      .from("companies")
-      .select("notification_email")
-      .eq("id", post.company_id)
-      .single();
-
+    // 1. 投稿者の notification_email
+    // 2. 投稿者の email
     const creator = normalizeCreator(
       post.creator as
         | PostForNotification["creator"]
         | PostForNotification["creator"][],
     );
     const notificationEmail =
-      companyData?.notification_email ||
+      creator?.notification_email ||
       creator?.email ||
-      applicantEmail ||
       null;
 
     if (!notificationEmail) {
-      console.warn("[MAIL] No notification email found.", {
+      console.warn("[MAIL] No notification email found for post creator.", {
         postId: post.id,
         companyId: post.company_id,
         createdByUserId: post.created_by_user_id,
@@ -192,14 +218,25 @@ export async function POST(request: Request) {
         appliedAt,
       };
 
+      console.info("[MAIL] Sending notification to:", notificationEmail, {
+        postId: post.id,
+        applicationType: application_type,
+      });
+
       const mailResult = await sendMail({
         to: notificationEmail,
-        subject: buildApplicationEmailSubject(post.title),
+        subject: buildApplicationEmailSubject(post.title, application_type),
         html: buildApplicationEmailHtml(emailData),
         text: buildApplicationEmailText(emailData),
       });
 
-      if (!mailResult.success) {
+      if (mailResult.success) {
+        console.info("[MAIL] Notification sent successfully.", {
+          messageId: mailResult.messageId,
+          postId: post.id,
+          applicationId: application.id,
+        });
+      } else {
         console.error("[MAIL] Failed to send application notification.", {
           postId: post.id,
           applicationId: application.id,

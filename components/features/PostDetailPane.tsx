@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, Chip, Divider } from "@heroui/react";
+import { Button, Chip, Divider, useDisclosure } from "@heroui/react";
 import { useEffect, useState } from "react";
 import { ApplicationModal } from "@/components/common/ApplicationModal";
 import { isActiveStatus } from "@/lib/postStatus";
@@ -55,8 +55,8 @@ export function PostDetailPane({
   post,
   onApplicationSuccess,
 }: PostDetailPaneProps) {
-  const [modalType, setModalType] = useState<ApplicationType | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const { isOpen: modalIsOpen, onOpen: openModal, onClose: closeModal } = useDisclosure();
+  const [modalType, setModalType] = useState<ApplicationType>("APPLY");
   const [appliedTypes, setAppliedTypes] = useState<Set<ApplicationType>>(
     new Set(),
   );
@@ -85,12 +85,14 @@ export function PostDetailPane({
       const {
         data: { user },
       } = await supabase.auth.getUser();
+      console.log("[PostDetailPane] fetchStatus user:", user ? `uid=${user.id}` : "null (セッションなし)");
       if (!user) return;
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("applications")
         .select("application_type")
         .eq("post_id", post.id)
         .eq("applicant_user_id", user.id);
+      console.log("[PostDetailPane] 応募状態:", { data, error: error?.message });
       if (data) {
         setAppliedTypes(
           new Set(data.map((a) => a.application_type as ApplicationType)),
@@ -103,18 +105,7 @@ export function PostDetailPane({
   const handleSuccess = (type: ApplicationType) => {
     setAppliedTypes((prev) => new Set([...prev, type]));
     onApplicationSuccess?.(post.id, type);
-    if (type === "APPLY") {
-      setSuccessMessage(
-        isOfficial
-          ? "応募を送信しました。担当者からの連絡をお待ちください。"
-          : "参加希望を送信しました。投稿者からの連絡をお待ちください。",
-      );
-    } else {
-      setSuccessMessage(
-        "お問い合わせを送信しました。担当者からの連絡をお待ちください。",
-      );
-    }
-    setModalType(null);
+    closeModal();
   };
 
   return (
@@ -122,22 +113,6 @@ export function PostDetailPane({
       <div className="bg-white rounded-xl border border-default-200 shadow-sm">
         {/* ── 基本情報（スティッキーヘッダー） ── */}
         <div className="sticky top-0 bg-white z-10 rounded-t-xl px-5 pt-5 pb-4 border-b border-default-100 shadow-[0_2px_6px_rgba(0,0,0,0.06)]">
-          {successMessage && (
-            <div className="mb-3 flex items-center justify-between bg-emerald-50 border border-emerald-200 rounded-lg px-4 py-2.5">
-              <p className="text-sm text-emerald-700 font-medium">
-                ✓ {successMessage}
-              </p>
-              <button
-                type="button"
-                onClick={() => setSuccessMessage(null)}
-                className="text-emerald-500 hover:text-emerald-700 text-xl leading-none ml-4"
-                aria-label="閉じる"
-              >
-                ×
-              </button>
-            </div>
-          )}
-
           {/* タイプ・ステータスバッジ */}
           <div className="flex items-center gap-2 flex-wrap mb-3">
             <Chip
@@ -187,12 +162,16 @@ export function PostDetailPane({
             ) : (
               <Button
                 size="md"
-                onPress={() => setModalType("APPLY")}
+                onPress={() => {
+                  console.log("[PostDetailPane] 応募ボタン押下:", { post_id: post.id, post_type: post.post_type });
+                  setModalType("APPLY");
+                  openModal();
+                }}
                 className={`${actionButtonBase} ${primaryActionClass}`}
                 variant="solid"
                 startContent={<SendIcon />}
               >
-                応募する
+                {isOfficial ? "応募する" : "参加希望する"}
               </Button>
             )}
             {appliedTypes.has("INQUIRY") ? (
@@ -204,13 +183,16 @@ export function PostDetailPane({
                 variant="flat"
                 style={{ cursor: "default", pointerEvents: "none" }}
               >
-                聞いてみる済み
+                問い合わせ済み
               </Button>
             ) : (
               <Button
                 variant="bordered"
                 size="md"
-                onPress={() => setModalType("INQUIRY")}
+                onPress={() => {
+                  setModalType("INQUIRY");
+                  openModal();
+                }}
                 className={`${actionButtonBase} ${subActionClass}`}
                 startContent={<MessageIcon />}
               >
@@ -306,15 +288,13 @@ export function PostDetailPane({
         )}
       </div>
 
-      {modalType && (
-        <ApplicationModal
-          post={post}
-          applicationType={modalType}
-          isOpen={true}
-          onClose={() => setModalType(null)}
-          onSuccess={() => handleSuccess(modalType)}
-        />
-      )}
+      <ApplicationModal
+        post={post}
+        applicationType={modalType}
+        isOpen={modalIsOpen}
+        onClose={closeModal}
+        onSuccess={() => handleSuccess(modalType)}
+      />
     </div>
   );
 }

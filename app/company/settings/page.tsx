@@ -8,18 +8,14 @@ import {
   Input,
 } from "@heroui/react";
 import { useEffect, useState } from "react";
-import { formInputClasses } from "@/components/common/FormField";
+import { formInputReadonlyClasses } from "@/components/common/FormField";
 import { PageHeader } from "@/components/common/PageHeader";
-import { AppButton } from "@/components/ui/AppButton";
 import { FormField } from "@/components/ui/FormField";
 import { createClient } from "@/lib/supabase/client";
 
 export default function AdminSettingsPage() {
-  const [companyId, setCompanyId] = useState<string | null>(null);
-  const [notificationEmail, setNotificationEmail] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [success, setSuccess] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [companyEmail, setCompanyEmail] = useState<string | null>(null);
+  const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -37,93 +33,49 @@ export default function AdminSettingsPage() {
         .limit(1)
         .single();
 
-      if (!memberData?.company_id) return;
-      setCompanyId(memberData.company_id);
+      if (!memberData?.company_id) {
+        setIsLoaded(true);
+        return;
+      }
 
       const { data: company } = await supabase
         .from("companies")
-        .select("notification_email")
+        .select("email")
         .eq("id", memberData.company_id)
         .single();
 
-      setNotificationEmail(company?.notification_email ?? "");
+      setCompanyEmail(company?.email ?? null);
+      setIsLoaded(true);
     };
     load();
   }, []);
 
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!companyId) {
-      setError("所属会社が見つかりません");
-      return;
-    }
-    setIsLoading(true);
-    setSuccess(null);
-    setError(null);
-
-    const supabase = createClient();
-    const { error: dbError } = await supabase
-      .from("companies")
-      .update({
-        notification_email: notificationEmail.trim() || null,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", companyId);
-
-    setIsLoading(false);
-    if (dbError) {
-      setError("更新に失敗しました");
-    } else {
-      setSuccess("設定を保存しました");
-    }
-  };
-
   return (
     <div className="max-w-2xl mx-auto">
-      <PageHeader title="管理設定" description="管理者向け通知設定" />
+      <PageHeader title="管理設定" description="所属会社の情報" />
 
-      <Card shadow="sm">
-        <CardHeader className="px-6 py-4">
-          <h2 className="text-base font-semibold">通知設定</h2>
-        </CardHeader>
-        <Divider />
-        <CardBody className="px-6 py-6">
-          <form onSubmit={handleSave} className="flex flex-col gap-6">
-            {success && (
-              <p className="text-success text-sm bg-success-50 rounded-lg p-3">
-                {success}
-              </p>
-            )}
-            {error && (
-              <p className="text-danger text-sm bg-danger-50 rounded-lg p-3">
-                {error}
-              </p>
-            )}
+      {isLoaded && companyEmail !== null && (
+        <Card shadow="sm">
+          <CardHeader className="px-6 py-4">
+            <h2 className="text-base font-semibold">所属会社メールアドレス</h2>
+          </CardHeader>
+          <Divider />
+          <CardBody className="px-6 py-6">
             <FormField
-              label="通知用メールアドレス"
-              description="応募・問い合わせ等の通知を受け取るメールアドレスです。未設定の場合は、投稿者またはログインユーザーのメールアドレスを利用します。"
+              label="所属会社メールアドレス"
+              description="会社の代表メールアドレスです。変更は管理者にお問い合わせください。"
             >
               <Input
-                value={notificationEmail}
-                onValueChange={setNotificationEmail}
-                type="email"
-                placeholder="notify@example.com"
+                value={companyEmail}
+                isReadOnly
                 variant="bordered"
                 size="lg"
-                classNames={formInputClasses}
+                classNames={formInputReadonlyClasses}
               />
             </FormField>
-            <div className="flex justify-end pt-2">
-              <AppButton
-                type="submit"
-                isLoading={isLoading}
-              >
-                保存する
-              </AppButton>
-            </div>
-          </form>
-        </CardBody>
-      </Card>
+          </CardBody>
+        </Card>
+      )}
     </div>
   );
 }

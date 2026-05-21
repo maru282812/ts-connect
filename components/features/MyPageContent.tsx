@@ -11,10 +11,9 @@ import {
   Tab,
   Tabs,
 } from "@heroui/react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   formInputClasses,
-  formInputReadonlyClasses,
   formSelectClasses,
 } from "@/components/common/FormField";
 import { PageHeader } from "@/components/common/PageHeader";
@@ -26,6 +25,8 @@ import type { Company } from "@/types/database";
 export function MyPageContent() {
   const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
+  const [originalEmail, setOriginalEmail] = useState("");
+  const [notificationEmail, setNotificationEmail] = useState("");
   const [companyId, setCompanyId] = useState("");
   const [companies, setCompanies] = useState<Company[]>([]);
   const [newPassword, setNewPassword] = useState("");
@@ -37,39 +38,44 @@ export function MyPageContent() {
   const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null);
   const [passwordError, setPasswordError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const load = async () => {
-      const supabase = createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return;
+  // public.users を正として表示する。auth.users は参照しない。
+  // メール変更は auth.updateUser → 確認メール承認 → トリガー同期 の順で完結する。
+  const fetchProfile = useCallback(async () => {
+    const supabase = createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return;
 
-      setEmail(user.email ?? "");
+    const { data: userProfile } = await supabase
+      .from("users")
+      .select("email, display_name, notification_email")
+      .eq("id", user.id)
+      .single();
 
-      const { data: userProfile } = await supabase
-        .from("users")
-        .select("display_name")
-        .eq("id", user.id)
-        .single();
-      setDisplayName(userProfile?.display_name ?? "");
+    setEmail(userProfile?.email ?? "");
+    setOriginalEmail(userProfile?.email ?? "");
+    setDisplayName(userProfile?.display_name ?? "");
+    setNotificationEmail(userProfile?.notification_email ?? "");
 
-      const { data: companiesData } = await supabase
-        .from("companies")
-        .select("id, name, created_at, updated_at")
-        .order("name");
-      if (companiesData) setCompanies(companiesData);
+    const { data: companiesData } = await supabase
+      .from("companies")
+      .select("id, name, created_at, updated_at")
+      .order("name");
+    if (companiesData) setCompanies(companiesData as Company[]);
 
-      const { data: memberData } = await supabase
-        .from("company_members")
-        .select("company_id")
-        .eq("user_id", user.id)
-        .limit(1)
-        .single();
-      if (memberData?.company_id) setCompanyId(memberData.company_id);
-    };
-    load();
+    const { data: memberData } = await supabase
+      .from("company_members")
+      .select("company_id")
+      .eq("user_id", user.id)
+      .limit(1)
+      .single();
+    if (memberData?.company_id) setCompanyId(memberData.company_id);
   }, []);
+
+  useEffect(() => {
+    fetchProfile();
+  }, [fetchProfile]);
 
   const handleProfileSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -77,47 +83,79 @@ export function MyPageContent() {
     setProfileSuccess(null);
     setProfileError(null);
 
-    const supabase = createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      setProfileError("認証エラー");
-      setIsProfileLoading(false);
-      return;
-    }
+    try {
+      const supabase = createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) {
+        setProfileError("認証エラー");
+        return;
+      }
 
-    const { error: authError } = await supabase.auth.updateUser({
-      data: { display_name: displayName },
-    });
+      const trimmedEmail = email.trim();
+      const emailChanged = trimmedEmail !== "" && trimmedEmail !== originalEmail;
 
-    const { error: dbError } = await supabase
-      .from("users")
-      .update({ display_name: displayName, updated_at: new Date().toISOString() })
-      .eq("id", user.id);
+      const { error: dbError } = await supabase
+        .from("users")
+        .update({
+          display_name: displayName,
+          notification_email: notificationEmail.trim() || null,
+        })
+        .eq("id", user.id);
 
-    let memberError: Error | null = null;
-    if (companyId) {
-      const { error: delError } = await supabase
-        .from("company_members")
-        .delete()
-        .eq("user_id", user.id);
+      if (dbError) {
+        setProfileError("更新に失敗しました");
+        return;
+      }
 
-      if (delError) {
-        memberError = delError;
-      } else {
+      // 所属会社を更新
+      if (companyId) {
+        const { error: delError } = await supabase
+          .from("company_members")
+          .delete()
+          .eq("user_id", user.id);
+
+        if (delError) {
+          setProfileError("更新に失敗しました");
+          return;
+        }
+
         const { error: insError } = await supabase
           .from("company_members")
           .insert({ user_id: user.id, company_id: companyId, role: "USER", status: "active" });
-        if (insError) memberError = insError;
-      }
-    }
 
-    setIsProfileLoading(false);
-    if (authError ?? dbError ?? memberError) {
-      setProfileError("更新に失敗しました");
-    } else {
+        if (insError) {
+          setProfileError("更新に失敗しました");
+          return;
+        }
+      }
+
+      if (emailChanged) {
+        const { error: emailError } = await supabase.auth.updateUser(
+          { email: trimmedEmail },
+          {
+            emailRedirectTo: `${window.location.origin}/auth/callback?next=/app/mypage`,
+          },
+        );
+
+        if (emailError) {
+          setProfileError(
+            `メールアドレスの変更に失敗しました: ${emailError.message}`,
+          );
+          return;
+        }
+
+        setProfileSuccess(
+          "新しいメールアドレス宛に確認メールを送信しました。メール内のリンクをクリックすると変更が完了します。",
+        );
+        return;
+      }
+
+      await fetchProfile();
       setProfileSuccess("プロフィールを更新しました");
+    } finally {
+      setIsProfileLoading(false);
     }
   };
 
@@ -181,16 +219,29 @@ export function MyPageContent() {
                     classNames={formInputClasses}
                   />
                 </FormField>
-                <FormField
-                  label="メールアドレス"
-                  description="メールアドレスの変更はサポートにお問い合わせください"
-                >
+                <FormField label="メールアドレス">
                   <Input
                     value={email}
-                    isReadOnly
+                    onValueChange={setEmail}
+                    type="email"
+                    placeholder="user@example.com"
                     variant="bordered"
                     size="lg"
-                    classNames={formInputReadonlyClasses}
+                    classNames={formInputClasses}
+                  />
+                </FormField>
+                <FormField
+                  label="通知先メールアドレス"
+                  description="未設定の場合はログインメールアドレスへ通知されます"
+                >
+                  <Input
+                    value={notificationEmail}
+                    onValueChange={setNotificationEmail}
+                    type="email"
+                    placeholder="notify@example.com"
+                    variant="bordered"
+                    size="lg"
+                    classNames={formInputClasses}
                   />
                 </FormField>
                 <FormField label="所属会社">
