@@ -41,6 +41,7 @@ function normalizeCreator(
 }
 
 export async function POST(request: Request) {
+  console.time("applications_total");
   console.log("[API /api/applications] POST リクエスト受信");
   try {
     const supabase = await createClient();
@@ -160,6 +161,7 @@ export async function POST(request: Request) {
       ((sequenceRows?.[0]?.application_sequence as number | null | undefined) ??
         0) + 1;
 
+    console.time("application_insert");
     const { data: application, error: insertError } = await supabase
       .from("applications")
       .insert({
@@ -186,6 +188,7 @@ export async function POST(request: Request) {
       );
     }
     console.log("[API] INSERT成功:", application?.id);
+    console.timeEnd("application_insert");
 
     // 通知先メール優先順位:
     // 1. 投稿者の notification_email
@@ -200,6 +203,7 @@ export async function POST(request: Request) {
       creator?.email ||
       null;
 
+    // メール送信は非同期で実行（レスポンスをブロックしない）
     if (!notificationEmail) {
       console.warn("[MAIL] No notification email found for post creator.", {
         postId: post.id,
@@ -218,33 +222,47 @@ export async function POST(request: Request) {
         appliedAt,
       };
 
-      console.info("[MAIL] Sending notification to:", notificationEmail, {
+      const applicationId = application.id;
+
+      console.info("[MAIL] Queuing notification to:", notificationEmail, {
         postId: post.id,
         applicationType: application_type,
       });
+      console.time("email_total");
 
-      const mailResult = await sendMail({
+      sendMail({
         to: notificationEmail,
         subject: buildApplicationEmailSubject(post.title, application_type),
         html: buildApplicationEmailHtml(emailData),
         text: buildApplicationEmailText(emailData),
-      });
-
-      if (mailResult.success) {
-        console.info("[MAIL] Notification sent successfully.", {
-          messageId: mailResult.messageId,
-          postId: post.id,
-          applicationId: application.id,
+      })
+        .then((mailResult) => {
+          console.timeEnd("email_total");
+          if (mailResult.success) {
+            console.info("[MAIL] Notification sent successfully.", {
+              messageId: mailResult.messageId,
+              postId: post.id,
+              applicationId,
+            });
+          } else {
+            console.error("[MAIL] Failed to send application notification.", {
+              postId: post.id,
+              applicationId,
+              error: mailResult.error,
+            });
+          }
+        })
+        .catch((error) => {
+          console.timeEnd("email_total");
+          console.error("[MAIL] Application notification email failed:", {
+            postId: post.id,
+            applicationId,
+            error,
+          });
         });
-      } else {
-        console.error("[MAIL] Failed to send application notification.", {
-          postId: post.id,
-          applicationId: application.id,
-          error: mailResult.error,
-        });
-      }
     }
 
+    console.timeEnd("applications_total");
     return NextResponse.json({ data: application }, { status: 201 });
   } catch (err) {
     console.error("[API] Unexpected application error:", err);
