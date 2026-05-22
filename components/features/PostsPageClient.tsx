@@ -119,6 +119,7 @@ export function PostsPageClient({
     Map<string, Set<ApplicationType>>
   >(new Map());
 
+  
   // Fetch posts list
   useEffect(() => {
     const fetchPosts = async () => {
