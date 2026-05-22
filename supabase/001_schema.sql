@@ -2652,20 +2652,20 @@ create policy "application_cancellations: 当事者SELECT"
 create policy "application_cancellations: 申請者INSERT"
   on public.application_cancellations for insert
   with check (
-    cancelled_by = auth.uid()
+    canceled_by = auth.uid()
   );
 
 -- ── inquiries ────────────────────────────────────────────────
 create policy "inquiries: 本人またはADMIN SELECT"
   on public.inquiries for select
   using (
-    user_id = auth.uid()
+    sender_user_id = auth.uid()
     or public.get_user_role() in ('ADMIN', 'MASTER_ADMIN')
   );
 
 create policy "inquiries: 認証ユーザーINSERT"
   on public.inquiries for insert
-  with check (user_id = auth.uid());
+  with check (sender_user_id = auth.uid());
 
 create policy "inquiries: ADMIN UPDATE"
   on public.inquiries for update
@@ -2679,18 +2679,18 @@ create policy "inquiry_messages: 本人またはADMIN SELECT"
     exists (
       select 1 from public.inquiries i
       where i.id = inquiry_id
-        and (i.user_id = auth.uid() or public.get_user_role() in ('ADMIN', 'MASTER_ADMIN'))
+        and (i.sender_user_id = auth.uid() or public.get_user_role() in ('ADMIN', 'MASTER_ADMIN'))
     )
   );
 
 create policy "inquiry_messages: 当事者INSERT"
   on public.inquiry_messages for insert
   with check (
-    sender_user_id = auth.uid()
+    sender_id = auth.uid()
     and exists (
       select 1 from public.inquiries i
       where i.id = inquiry_id
-        and (i.user_id = auth.uid() or public.get_user_role() in ('ADMIN', 'MASTER_ADMIN'))
+        and (i.sender_user_id = auth.uid() or public.get_user_role() in ('ADMIN', 'MASTER_ADMIN'))
     )
   );
 

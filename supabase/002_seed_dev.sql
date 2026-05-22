@@ -930,6 +930,83 @@ begin
     'ユーザーアンケートの設問設計をレビューしてほしい', 1
   ) on conflict (id) do nothing;
 
+  -- ==========================================================
+  -- STEP 7: mobile future feature samples
+  --
+  -- Existing schema already supports saved posts, recent views,
+  -- unread notifications, notification preferences, and message
+  -- replies. Seed only the minimum rows needed to verify mobile
+  -- UI states without adding mobile-specific columns.
+  -- ==========================================================
+
+  insert into public.post_bookmarks (id, user_id, post_id, created_at) values
+    ('ee000001-0000-0000-0000-000000000000', usr1, p_off3, now() - interval '2 days'),
+    ('ee000002-0000-0000-0000-000000000000', usr1, p_cas1, now() - interval '1 day'),
+    ('ee000003-0000-0000-0000-000000000000', usr2, p_off1, now() - interval '6 hours')
+  on conflict (id) do nothing;
+
+  insert into public.post_view_logs (id, post_id, user_id, ip_hash, user_agent, viewed_at) values
+    ('ef000001-0000-0000-0000-000000000000', p_off1, usr1, 'dev-user1-view-1', 'dev-mobile-safari', now() - interval '3 hours'),
+    ('ef000002-0000-0000-0000-000000000000', p_off3, usr1, 'dev-user1-view-2', 'dev-mobile-safari', now() - interval '40 minutes'),
+    ('ef000003-0000-0000-0000-000000000000', p_cas1, usr2, 'dev-user2-view-1', 'dev-android-chrome', now() - interval '20 minutes')
+  on conflict (id) do nothing;
+
+  insert into public.application_messages (id, application_id, sender_user_id, body, is_read, created_at) values
+    ('f1000001-0000-0000-0000-000000000000', 'dd000002-0000-0000-0000-000000000000', usr3, 'Dev inquiry follow-up message for mobile unread/reply state.', true, now() - interval '2 hours'),
+    ('f1000002-0000-0000-0000-000000000000', 'dd000002-0000-0000-0000-000000000000', adm1, 'Dev admin reply for mobile reply indicator.', false, now() - interval '30 minutes'),
+    ('f1000003-0000-0000-0000-000000000000', 'dd000003-0000-0000-0000-000000000000', adm1, 'Dev review message for application detail.', false, now() - interval '20 minutes')
+  on conflict (id) do nothing;
+
+  insert into public.notifications (
+    id, user_id, type, title, body, related_type, related_id, is_read, read_at, created_at
+  ) values
+    (
+      'f2000001-0000-0000-0000-000000000000',
+      usr3,
+      'MESSAGE_RECEIVED',
+      '返信が届いています',
+      '問い合わせへの返信があります。',
+      'application',
+      'dd000002-0000-0000-0000-000000000000',
+      false,
+      null,
+      now() - interval '30 minutes'
+    ),
+    (
+      'f2000002-0000-0000-0000-000000000000',
+      usr4,
+      'APPLICATION_STATUS_CHANGED',
+      '応募が確認中になりました',
+      '応募ステータスが REVIEWING に更新されました。',
+      'application',
+      'dd000003-0000-0000-0000-000000000000',
+      false,
+      null,
+      now() - interval '20 minutes'
+    ),
+    (
+      'f2000003-0000-0000-0000-000000000000',
+      usr5,
+      'APPLICATION_STATUS_CHANGED',
+      '応募が承認されました',
+      '応募ステータスが ACCEPTED に更新されました。',
+      'application',
+      'dd000004-0000-0000-0000-000000000000',
+      true,
+      now() - interval '10 minutes',
+      now() - interval '1 hour'
+    )
+  on conflict (id) do nothing;
+
+  insert into public.notification_settings (id, user_id, event_type, in_app, email) values
+    ('f3000001-0000-0000-0000-000000000000', usr1, 'MESSAGE_RECEIVED', true, true),
+    ('f3000002-0000-0000-0000-000000000000', usr1, 'APPLICATION_STATUS_CHANGED', true, false),
+    ('f3000003-0000-0000-0000-000000000000', usr2, 'APPLICATION_RECEIVED', true, true)
+  on conflict (user_id, event_type) do update set
+    in_app = excluded.in_app,
+    email = excluded.email,
+    updated_at = now();
+
   raise notice '===========================================';
   raise notice '002_seed_dev.sql の投入が完了しました。';
   raise notice '  MASTER_ADMIN: 1件 (master@example.com)';
