@@ -8,7 +8,7 @@
 -- ログイン情報（共通パスワード: password123）
 --
 --   MASTER_ADMIN:
---     master@example.com  （全社アクセス / company_members 所属なし）
+--    master@example.com   （全社アクセス / company_members 所属なし）
 --
 --   ADMIN:
 --     admin1@example.com  （管理者A / T's agency holdings）

@@ -120,12 +120,12 @@ export default function SignupPage() {
                 <p className="text-danger text-sm">{error}</p>
               </div>
             )}
-            <FormField label="お名前" required>
+            <FormField label="お名前" required description="応募・連絡時に使用するため、本名での登録をお願いいたします。">
               <Input
                 value={displayName}
                 onValueChange={setDisplayName}
                 isRequired
-                placeholder="山田 太郎"
+                placeholder="例）山田 太郎（本名）"
                 variant="bordered"
                 size="lg"
                 classNames={formInputClasses}
