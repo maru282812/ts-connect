@@ -44,17 +44,15 @@ export function MyApplicationsList() {
         <CardBody className="p-0">
           {isLoading ? (
             <div className="p-6 space-y-3">
-              {Array.from({ length: 3 }).map((_, i) => (
+              {["sk-a", "sk-b", "sk-c"].map((key) => (
                 <div
-                  key={i}
+                  key={key}
                   className="h-12 bg-default-100 rounded-lg animate-pulse"
                 />
               ))}
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <ApplicationTable applications={applications} />
-            </div>
+            <ApplicationTable applications={applications} />
           )}
         </CardBody>
       </Card>

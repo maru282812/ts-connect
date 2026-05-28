@@ -9,6 +9,7 @@ import {
   TableHeader,
   TableRow,
 } from "@heroui/react";
+import { ApplicationListCard } from "@/components/common/ApplicationListCard";
 import type { ApplicationStatus, ApplicationType } from "@/types/database";
 
 export interface ApplicationRow {
@@ -61,68 +62,95 @@ interface Props {
 
 export function AdminApplicationsClient({ applications }: Props) {
   return (
-    <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-      <Table aria-label="応募・問い合わせ一覧" removeWrapper>
-        <TableHeader>
-          <TableColumn>案件タイトル</TableColumn>
-          <TableColumn>応募者</TableColumn>
-          <TableColumn>所属</TableColumn>
-          <TableColumn>種別</TableColumn>
-          <TableColumn>応募日時</TableColumn>
-          <TableColumn>状態</TableColumn>
-        </TableHeader>
-        <TableBody emptyContent="応募はまだありません">
-          {applications.map((app) => (
-            <TableRow key={app.id}>
-              <TableCell>
-                <span className="font-medium text-default-800 line-clamp-1 max-w-xs">
-                  {app.post_title_snapshot}
-                </span>
-              </TableCell>
-              <TableCell>
-                <div>
-                  <p className="text-sm font-medium text-default-800">
-                    {app.applicant_name_snapshot}
-                  </p>
-                  <p className="text-xs text-default-400">
-                    {app.applicant_email_snapshot}
-                  </p>
-                </div>
-              </TableCell>
-              <TableCell>
-                <span className="text-sm text-default-600">
-                  {app.applicant_company_snapshot ?? "—"}
-                </span>
-              </TableCell>
-              <TableCell>
-                <Chip
-                  color={typeColorMap[app.application_type]}
-                  size="sm"
-                  variant="flat"
-                >
-                  {typeLabelMap[app.application_type]}
-                </Chip>
-              </TableCell>
-              <TableCell>
-                <span className="text-sm text-default-500">
-                  {new Date(app.applied_at).toLocaleString("ja-JP", {
-                    timeZone: "Asia/Tokyo",
-                  })}
-                </span>
-              </TableCell>
-              <TableCell>
-                <Chip
-                  color={statusColorMap[app.application_status]}
-                  size="sm"
-                  variant="flat"
-                >
-                  {statusLabelMap[app.application_status]}
-                </Chip>
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+    <div>
+      {/* ── PC テーブル (lg 以上) ── */}
+      <div className="hidden lg:block bg-white rounded-xl shadow-sm overflow-hidden">
+        <Table aria-label="応募・問い合わせ一覧" removeWrapper>
+          <TableHeader>
+            <TableColumn>案件タイトル</TableColumn>
+            <TableColumn>応募者</TableColumn>
+            <TableColumn>所属</TableColumn>
+            <TableColumn>種別</TableColumn>
+            <TableColumn>応募日時</TableColumn>
+            <TableColumn>状態</TableColumn>
+          </TableHeader>
+          <TableBody emptyContent="応募はまだありません">
+            {applications.map((app) => (
+              <TableRow key={app.id}>
+                <TableCell>
+                  <span className="font-medium text-default-800 line-clamp-1 max-w-xs">
+                    {app.post_title_snapshot}
+                  </span>
+                </TableCell>
+                <TableCell>
+                  <div>
+                    <p className="text-sm font-medium text-default-800">
+                      {app.applicant_name_snapshot}
+                    </p>
+                    <p className="text-xs text-default-400">
+                      {app.applicant_email_snapshot}
+                    </p>
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <span className="text-sm text-default-600">
+                    {app.applicant_company_snapshot ?? "—"}
+                  </span>
+                </TableCell>
+                <TableCell>
+                  <Chip
+                    color={typeColorMap[app.application_type]}
+                    size="sm"
+                    variant="flat"
+                  >
+                    {typeLabelMap[app.application_type]}
+                  </Chip>
+                </TableCell>
+                <TableCell>
+                  <span className="text-sm text-default-500">
+                    {new Date(app.applied_at).toLocaleString("ja-JP", {
+                      timeZone: "Asia/Tokyo",
+                    })}
+                  </span>
+                </TableCell>
+                <TableCell>
+                  <Chip
+                    color={statusColorMap[app.application_status]}
+                    size="sm"
+                    variant="flat"
+                  >
+                    {statusLabelMap[app.application_status]}
+                  </Chip>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+
+      {/* ── モバイル / タブレット カード (lg 未満) ── */}
+      <div className="lg:hidden">
+        {applications.length === 0 ? (
+          <p className="text-center py-12 text-sm text-default-400">
+            応募はまだありません
+          </p>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {applications.map((app) => (
+              <ApplicationListCard
+                key={app.id}
+                postTitle={app.post_title_snapshot}
+                applicationType={app.application_type}
+                applicationStatus={app.application_status}
+                appliedAt={app.applied_at}
+                applicantName={app.applicant_name_snapshot}
+                applicantEmail={app.applicant_email_snapshot}
+                applicantCompany={app.applicant_company_snapshot}
+              />
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

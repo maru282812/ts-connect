@@ -19,32 +19,31 @@ export function PostListItem({
 }: PostListItemProps) {
   const isOfficial = post.post_type === "OFFICIAL";
   const deadline = post.deadline_at
-    ? new Date(post.deadline_at).toLocaleDateString("ja-JP")
+    ? new Date(post.deadline_at).toLocaleDateString("ja-JP", {
+        month: "numeric",
+        day: "numeric",
+      })
     : null;
-  const createdAt = new Date(post.created_at).toLocaleDateString("ja-JP");
   const companyName = post.companies?.name ?? "会社不明";
   const userName = post.users?.display_name ?? "匿名";
   const [imgError, setImgError] = useState(false);
 
   return (
-    <div
+    <button
+      type="button"
       onClick={onClick}
       className={`
-        flex flex-col rounded-lg cursor-pointer overflow-hidden select-none
+        flex flex-col rounded-lg cursor-pointer overflow-hidden select-none text-left w-full
         transition-all duration-200
         ${
           isSelected
-            ? "border-2 border-blue-600 bg-blue-50 shadow-md"
-            : "border border-default-100 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.08)] hover:-translate-y-0.5 hover:shadow-[0_6px_16px_rgba(0,0,0,0.12)]"
+            ? "border-2 border-blue-500 bg-blue-50 shadow-md"
+            : "border border-default-200 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.07)] hover:-translate-y-1 hover:shadow-[0_8px_20px_rgba(0,0,0,0.1)] hover:border-blue-200"
         }
       `}
-      style={{ minHeight: "320px" }}
     >
-      {/* ── サムネイル（高さ固定 80px） ─────────────────── */}
-      <div
-        className="w-full overflow-hidden shrink-0"
-        style={{ height: "80px" }}
-      >
+      {/* ── サムネイル */}
+      <div className="w-full overflow-hidden shrink-0 h-[110px] md:h-[140px]">
         {post.thumbnail_url && !imgError ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -56,135 +55,85 @@ export function PostListItem({
           />
         ) : (
           <div
-            className={`w-full h-full flex flex-col items-center justify-center gap-1 px-3
+            className={`w-full h-full flex items-center justify-center px-4
               ${isOfficial ? "bg-blue-50 text-blue-700" : "bg-green-50 text-green-700"}`}
             style={{ borderRadius: "8px 8px 0 0" }}
           >
-            <span
-              className="font-medium"
-              style={{ fontSize: "10px" }}
-            >
-              {isOfficial ? "公式案件" : "気軽に投稿"}
-            </span>
-            <span className="font-bold text-xs text-center line-clamp-2 leading-snug">
+            <span className="font-semibold text-sm line-clamp-2 text-center leading-snug">
               {post.title}
             </span>
           </div>
         )}
       </div>
 
-      {/* ── テキストエリア ──────────────────────────────── */}
-      <div className="flex flex-col flex-1 p-3 overflow-hidden">
-        {/* 種別・ステータスバッジ */}
-        <div className="flex items-center gap-1 mb-2 flex-wrap">
-          <Chip
-            size="sm"
-            color={isOfficial ? "primary" : "success"}
-            variant="flat"
-            className="h-5"
-            style={{ fontSize: "11px", padding: "2px 6px" }}
-          >
-            {isOfficial ? "公式" : "気軽"}
-          </Chip>
-          {post.post_status === "IN_PROGRESS" && (
-            <Chip
-              size="sm"
-              color="warning"
-              variant="flat"
-              className="h-5"
-              style={{ fontSize: "11px", padding: "2px 6px" }}
-            >
-              対応中
-            </Chip>
-          )}
-        </div>
-
+      {/* ── コンテンツエリア */}
+      <div className="flex flex-col flex-1 p-3 md:p-4 gap-2 overflow-hidden">
         {/* タイトル */}
         <h3
-          className={`line-clamp-2 mb-2 ${
+          className={`text-sm md:text-base font-semibold line-clamp-2 leading-snug ${
             isSelected ? "text-blue-700" : "text-default-800"
           }`}
-          style={{
-            fontSize: "16px",
-            fontWeight: 600,
-            lineHeight: 1.4,
-            display: "-webkit-box",
-            WebkitLineClamp: 2,
-            WebkitBoxOrient: "vertical",
-            overflow: "hidden",
-          }}
         >
           {post.title}
         </h3>
 
-        {/* 報酬・締切 / 投稿日 */}
-        <div className="flex flex-col gap-1 flex-1">
-          {isOfficial ? (
-            <>
-              {post.price_text && (
-                <p className="text-sm font-bold text-primary">
-                  {post.price_text}
-                </p>
-              )}
-              {deadline && (
-                <p
-                  className="text-warning-600"
-                  style={{ fontSize: "12px", color: "#d97706" }}
-                >
-                  締切: {deadline}
-                </p>
-              )}
-            </>
-          ) : (
-            <>
-              {deadline && (
-                <p
-                  className="text-warning-600"
-                  style={{ fontSize: "12px", color: "#d97706" }}
-                >
-                  締切: {deadline}
-                </p>
-              )}
-              <p style={{ fontSize: "12px", color: "#6b7280" }}>{createdAt}</p>
-            </>
+        {/* 報酬・タグ */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <Chip size="sm" color={isOfficial ? "primary" : "success"} variant="flat">
+            {isOfficial ? "公式" : "気軽"}
+          </Chip>
+          {post.post_status === "IN_PROGRESS" && (
+            <Chip size="sm" color="warning" variant="flat">
+              対応中
+            </Chip>
+          )}
+          {isOfficial && post.price_text && (
+            <span className="text-sm font-bold text-primary">{post.price_text}</span>
           )}
         </div>
 
-        {/* 会社名 / 投稿者名 + 補足 */}
-        <div className="mt-auto pt-2 border-t border-default-100">
-          <p
-            className="truncate"
-            style={{ fontSize: "12px", color: "#6b7280" }}
-          >
+        {/* 本文: モバイルは2行、デスクトップは3行 */}
+        {post.body && (
+          <p className="text-xs text-default-400 line-clamp-2 md:line-clamp-3 leading-relaxed">
+            {post.body}
+          </p>
+        )}
+
+        {/* 会社名・期限 */}
+        <div className="mt-auto pt-2 border-t border-default-100 flex items-center justify-between gap-2">
+          <p className="text-xs text-default-400 truncate">
             {isOfficial ? companyName : userName}
           </p>
-          {isOfficial &&
-            post.is_application_limit_enabled &&
-            post.application_limit && (
-              <p
-                className="mt-0.5 text-default-400"
-                style={{ fontSize: "10px" }}
-              >
-                {post.application_limit}名募集
-              </p>
+          <div className="flex items-center gap-2 shrink-0">
+            {deadline && (
+              <span className="text-[11px] text-amber-600">{deadline}まで</span>
             )}
-          {/* 応募済みバッジ */}
-          {appliedTypes && appliedTypes.size > 0 && (
-            <div className="flex flex-wrap gap-1 mt-1.5">
-              {appliedTypes.has("APPLY") && (
-                <span className="inline-block text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full font-medium leading-none">
-                  {isOfficial ? "応募済み" : "参加希望済み"}
+            {isOfficial &&
+              post.is_application_limit_enabled &&
+              post.application_limit && (
+                <span className="text-[11px] text-default-400 hidden sm:inline">
+                  {post.application_limit}名募集
                 </span>
               )}
-              {appliedTypes.has("INQUIRY") && (
-                <span className="inline-block text-[10px] bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded-full font-medium leading-none">
-                  聞いてみる済み
-                </span>
-              )}
-            </div>
-          )}
+          </div>
         </div>
+
+        {/* 応募済みバッジ */}
+        {appliedTypes && appliedTypes.size > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {appliedTypes.has("APPLY") && (
+              <span className="inline-block text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium leading-none">
+                {isOfficial ? "応募済み" : "参加希望済み"}
+              </span>
+            )}
+            {appliedTypes.has("INQUIRY") && (
+              <span className="inline-block text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-medium leading-none">
+                聞いてみる済み
+              </span>
+            )}
+          </div>
+        )}
       </div>
-    </div>
+    </button>
   );
 }

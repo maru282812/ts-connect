@@ -4,6 +4,7 @@ import { Button } from "@heroui/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
+import { PostListCard } from "@/components/common/PostListCard";
 import { createClient } from "@/lib/supabase/client";
 import type { PostType, PostWithRelations } from "@/types/database";
 import { PostThumbnail } from "./PostThumbnail";
@@ -81,24 +82,26 @@ export function ArchiveClient({
   return (
     <div>
       {/* ヘッダー */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-5">
         <div>
-          <h1 className="text-2xl font-bold text-default-900">過去案件</h1>
+          <h1 className="text-xl font-bold text-default-900 sm:text-2xl">
+            過去案件
+          </h1>
           <p className="text-sm text-default-500 mt-0.5">
             終了済み案件の一覧 · 複製して再投稿できます
           </p>
         </div>
         <Link
           href="/company/posts"
-          className="text-sm text-default-400 hover:text-default-700 transition-colors"
+          className="text-sm text-default-400 hover:text-default-700 transition-colors shrink-0"
         >
           ← 案件管理へ
         </Link>
       </div>
 
       {/* 検索・フィルター */}
-      <div className="flex items-center gap-3 mb-4">
-        <div className="relative flex-1 max-w-sm">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mb-4">
+        <div className="relative flex-1 sm:max-w-sm">
           <svg
             className="absolute left-3 top-1/2 -translate-y-1/2 text-default-400"
             width="16"
@@ -107,6 +110,7 @@ export function ArchiveClient({
             fill="none"
             stroke="currentColor"
             strokeWidth="2"
+            aria-hidden="true"
           >
             <circle cx="11" cy="11" r="8" />
             <line x1="21" y1="21" x2="16.65" y2="16.65" />
@@ -116,17 +120,17 @@ export function ArchiveClient({
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="タイトル・会社名で検索"
-            className="w-full pl-9 pr-4 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+            className="w-full pl-9 pr-4 py-2.5 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
           />
         </div>
 
-        <div className="flex gap-1">
+        <div className="flex gap-1.5">
           {(["ALL", "OFFICIAL", "CASUAL"] as const).map((type) => (
             <button
               type="button"
               key={type}
               onClick={() => setTypeFilter(type)}
-              className={`px-3 py-2 text-xs rounded-lg font-medium transition-colors ${
+              className={`flex-1 sm:flex-none px-3 py-2.5 text-xs rounded-lg font-medium transition-colors ${
                 typeFilter === type
                   ? type === "OFFICIAL"
                     ? "bg-blue-800 text-white"
@@ -146,8 +150,8 @@ export function ArchiveClient({
         </div>
       </div>
 
-      {/* 一覧テーブル */}
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+      {/* ── PC テーブル (lg 以上) ── */}
+      <div className="hidden lg:block bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
         {filtered.length === 0 ? (
           <div className="p-12 text-center text-sm text-default-400">
             {search || typeFilter !== "ALL"
@@ -182,6 +186,9 @@ export function ArchiveClient({
               {filtered.map((post) => {
                 const canOperate =
                   isMasterAdmin || post.created_by_user_id === currentUserId;
+                const thumbnailUrl = (
+                  post as PostWithRelations & { thumbnail_url?: string | null }
+                ).thumbnail_url;
                 return (
                   <tr
                     key={post.id}
@@ -189,13 +196,7 @@ export function ArchiveClient({
                   >
                     <td className="px-4 py-3">
                       <PostThumbnail
-                        thumbnailUrl={
-                          (
-                            post as PostWithRelations & {
-                              thumbnail_url?: string | null;
-                            }
-                          ).thumbnail_url
-                        }
+                        thumbnailUrl={thumbnailUrl}
                         title={post.title}
                         type={post.post_type}
                         size="sm"
@@ -250,6 +251,69 @@ export function ArchiveClient({
               })}
             </tbody>
           </table>
+        )}
+      </div>
+
+      {/* ── モバイル / タブレット カード (lg 未満) ── */}
+      <div className="lg:hidden">
+        {filtered.length === 0 ? (
+          <p className="text-center py-12 text-sm text-default-400">
+            {search || typeFilter !== "ALL"
+              ? "条件に一致する過去案件がありません"
+              : "過去案件がありません"}
+          </p>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {filtered.map((post) => {
+              const canOperate =
+                isMasterAdmin || post.created_by_user_id === currentUserId;
+              const thumbnailUrl = (
+                post as PostWithRelations & { thumbnail_url?: string | null }
+              ).thumbnail_url;
+              return (
+                <PostListCard
+                  key={post.id}
+                  title={post.title}
+                  post_type={post.post_type}
+                  thumbnail_url={thumbnailUrl}
+                  metaItems={[
+                    {
+                      label: "会社",
+                      value: post.companies?.name ?? "—",
+                    },
+                    {
+                      label: "終了日",
+                      value: post.closed_at
+                        ? new Date(post.closed_at).toLocaleDateString("ja-JP")
+                        : "—",
+                    },
+                  ]}
+                  actions={
+                    <>
+                      <Link
+                        href={`/company/archive/${post.id}`}
+                        className="flex-1 text-center px-4 py-2.5 rounded-lg text-sm font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors"
+                      >
+                        詳細
+                      </Link>
+                      {canOperate && (
+                        <button
+                          type="button"
+                          onClick={() => handleDuplicate(post)}
+                          disabled={duplicating === post.id}
+                          className="flex-1 text-center px-4 py-2.5 rounded-lg text-sm font-medium bg-blue-700 hover:bg-blue-800 text-white transition-colors disabled:opacity-60"
+                        >
+                          {duplicating === post.id
+                            ? "処理中..."
+                            : "複製して再投稿"}
+                        </button>
+                      )}
+                    </>
+                  }
+                />
+              );
+            })}
+          </div>
         )}
       </div>
 

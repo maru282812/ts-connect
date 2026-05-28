@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { PostStatusBadge } from "@/components/admin/PostStatusBadge";
 import { PostThumbnail } from "@/components/admin/PostThumbnail";
 import { PostTypeBadge } from "@/components/admin/PostTypeBadge";
+import { PostListCard } from "@/components/common/PostListCard";
 import { createClient } from "@/lib/supabase/client";
 import type { PostWithRelations } from "@/types/database";
 
@@ -85,7 +86,8 @@ export function MyPostsContent({ editBasePath, successParam }: MyPostsContentPro
         </div>
       )}
 
-      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+      {/* PC テーブル (lg 以上) */}
+      <div className="hidden lg:block bg-white rounded-xl border border-slate-200 overflow-hidden">
         <table className="w-full text-sm table-fixed">
           <thead>
             <tr className="border-b border-slate-100 bg-slate-50">
@@ -160,6 +162,38 @@ export function MyPostsContent({ editBasePath, successParam }: MyPostsContentPro
             ))}
           </tbody>
         </table>
+      </div>
+
+      {/* モバイル / タブレット カード (lg 未満) */}
+      <div className="lg:hidden grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {posts.map((post) => (
+          <PostListCard
+            key={post.id}
+            title={post.title}
+            post_type={post.post_type}
+            post_status={post.post_status}
+            thumbnail_url={post.thumbnail_url}
+            metaItems={[
+              {
+                label: "更新日",
+                value: new Date(post.updated_at).toLocaleDateString("ja-JP"),
+              },
+            ]}
+            actions={
+              editBasePath ? (
+                <button
+                  type="button"
+                  onClick={() =>
+                    router.push(`${editBasePath}/${post.id}/edit`)
+                  }
+                  className="flex-1 text-center px-4 rounded-lg text-sm font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors min-h-[44px]"
+                >
+                  編集
+                </button>
+              ) : undefined
+            }
+          />
+        ))}
       </div>
     </div>
   );

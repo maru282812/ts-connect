@@ -1,9 +1,16 @@
 "use client";
 
-import { Button, Input } from "@heroui/react";
+import {
+  Drawer,
+  DrawerBody,
+  DrawerContent,
+  DrawerHeader,
+  Input,
+  useDisclosure,
+} from "@heroui/react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { PostDetailPane } from "@/components/features/PostDetailPane";
 import { PostListItem } from "@/components/features/PostListItem";
 import { AppButton } from "@/components/ui/AppButton";
@@ -16,20 +23,17 @@ import type {
 
 type TabType = "ALL" | PostType;
 
-const TABS: { key: TabType; label: string; color: string }[] = [
-  { key: "ALL", label: "すべて", color: "bg-default-300" },
-  { key: "OFFICIAL", label: "公式案件", color: "bg-blue-500" },
-  { key: "CASUAL", label: "気軽に投稿", color: "bg-green-500" },
+const TABS: { key: TabType; label: string }[] = [
+  { key: "ALL", label: "すべて" },
+  { key: "OFFICIAL", label: "公式案件" },
+  { key: "CASUAL", label: "気軽に投稿" },
 ];
 
 interface PostsPageClientProps {
-  /** 新規投稿ボタンのリンク先。省略時はボタン非表示 */
   newPostHref?: string;
-  /** 初期タブ。省略時は "ALL" */
   initialTab?: TabType;
 }
 
-// SearchIcon component
 function SearchIcon() {
   return (
     <svg
@@ -47,44 +51,11 @@ function SearchIcon() {
   );
 }
 
-// FilterIcon component
-function FilterIcon() {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      className="text-default-500 shrink-0"
-    >
-      <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
-    </svg>
-  );
-}
-
-// CheckIcon component
-function CheckIcon() {
-  return (
-    <svg
-      width="11"
-      height="11"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="3"
-    >
-      <polyline points="20 6 9 17 4 12" />
-    </svg>
-  );
-}
-
 function PlusIcon() {
   return (
     <svg
       aria-hidden="true"
-      className="h-4 w-4"
+      className="h-5 w-5"
       fill="none"
       stroke="currentColor"
       strokeWidth="2.5"
@@ -101,6 +72,8 @@ export function PostsPageClient({
   initialTab = "ALL",
 }: PostsPageClientProps) {
   const searchParams = useSearchParams();
+  const { isOpen: isDrawerOpen, onOpen: openDrawer, onClose: closeDrawer } =
+    useDisclosure();
 
   const [posts, setPosts] = useState<PostWithRelations[]>([]);
   const [search, setSearch] = useState("");
@@ -112,15 +85,17 @@ export function PostsPageClient({
   const [selectedPost, setSelectedPost] = useState<PostWithRelations | null>(
     null,
   );
-  const [isMobileDetail, setIsMobileDetail] = useState(
-    !!searchParams.get("post"),
-  );
   const [applicationsByPostId, setApplicationsByPostId] = useState<
     Map<string, Set<ApplicationType>>
   >(new Map());
 
-  
-  // Fetch posts list
+  const initialPostId = useRef(searchParams.get("post"));
+  useEffect(() => {
+    if (initialPostId.current) {
+      openDrawer();
+    }
+  }, [openDrawer]);
+
   useEffect(() => {
     const fetchPosts = async () => {
       setIsLoading(true);
@@ -147,15 +122,13 @@ export function PostsPageClient({
       const newPosts = (data as PostWithRelations[]) ?? [];
       setPosts(newPosts);
 
-      // 現在の選択が新しい一覧にあれば維持、なければ先頭を選択
       setSelectedPostId((prev) => {
         if (prev && newPosts.some((p) => p.id === prev)) return prev;
-        return newPosts[0]?.id ?? null;
+        return null;
       });
 
       setIsLoading(false);
 
-      // 現在ユーザーの応募状態を取得してカードに反映
       const postIds = newPosts.map((p) => p.id);
       if (postIds.length === 0) return;
       const {
@@ -193,7 +166,6 @@ export function PostsPageClient({
     [],
   );
 
-  // Resolve selectedPost from list or fetch individually
   useEffect(() => {
     if (!selectedPostId) {
       setSelectedPost(null);
@@ -204,7 +176,6 @@ export function PostsPageClient({
       setSelectedPost(found);
       return;
     }
-    // Not in current list (e.g. loaded from URL param) — fetch directly
     const fetchSingle = async () => {
       const supabase = createClient();
       const { data } = await supabase
@@ -219,22 +190,25 @@ export function PostsPageClient({
     fetchSingle();
   }, [selectedPostId, posts]);
 
-  const handleSelectPost = useCallback((post: PostWithRelations) => {
-    setSelectedPostId(post.id);
-    setIsMobileDetail(true);
-    const url = new URL(window.location.href);
-    url.searchParams.set("post", post.id);
-    window.history.pushState({}, "", url.toString());
-  }, []);
+  const handleSelectPost = useCallback(
+    (post: PostWithRelations) => {
+      setSelectedPostId(post.id);
+      openDrawer();
+      const url = new URL(window.location.href);
+      url.searchParams.set("post", post.id);
+      window.history.pushState({}, "", url.toString());
+    },
+    [openDrawer],
+  );
 
-  const handleBackToList = useCallback(() => {
-    setIsMobileDetail(false);
+  const handleCloseDrawer = useCallback(() => {
+    closeDrawer();
     setSelectedPostId(null);
     setSelectedPost(null);
     const url = new URL(window.location.href);
     url.searchParams.delete("post");
     window.history.pushState({}, "", url.toString());
-  }, []);
+  }, [closeDrawer]);
 
   const handleTabChange = (newTab: TabType) => {
     setTab(newTab);
@@ -248,28 +222,55 @@ export function PostsPageClient({
   const hasActiveFilter = search.trim() !== "" || tab !== "ALL";
 
   return (
-    <div className="flex gap-0 h-[calc(100vh-6rem)] overflow-hidden">
+    <>
       {/* ============================================================
-          左カラム: 検索条件エリア (27%)
+          コンテナ: デスクトップは固定高さ内スクロール、モバイルは自然スクロール
       ============================================================ */}
-      <div className="hidden lg:block w-[27%] min-w-[180px] shrink-0 pr-4 overflow-y-auto h-full">
-        <div className="bg-white rounded-xl border border-default-100 shadow-sm p-4">
-          {/* ヘッダー */}
-          <div className="flex items-center gap-2 mb-4 pb-3 border-b border-default-100">
-            <FilterIcon />
-            <h2 className="text-sm font-bold text-default-700">検索条件</h2>
-            {hasActiveFilter && (
-              <span className="ml-auto w-2 h-2 rounded-full bg-primary shrink-0" />
+      <div className="flex flex-col max-w-[1400px] mx-auto w-full md:h-[calc(100vh-6rem)] md:overflow-hidden">
+
+        {/* ============================================================
+            検索・フィルターバー
+        ============================================================ */}
+        <div className="shrink-0 border-b border-default-200/60 pb-3 mb-2">
+          {/* 1行目: タイトル + 検索 (デスクトップ) / タイトルのみ (モバイル) */}
+          <div className="flex items-center gap-2 mb-2">
+            <div className="shrink-0">
+              <h1 className="text-sm font-bold text-default-800 leading-tight">案件一覧</h1>
+              <p className="text-[11px] text-default-400">
+                {isLoading ? "読み込み中..." : `${posts.length}件`}
+              </p>
+            </div>
+
+            {/* デスクトップ: 区切り + 検索バー */}
+            <div className="w-px h-6 bg-default-200 shrink-0 hidden md:block" />
+            <div className="hidden md:block flex-1 min-w-[140px] max-w-[260px]">
+              <Input
+                placeholder="キーワード検索..."
+                value={search}
+                onValueChange={setSearch}
+                size="sm"
+                variant="bordered"
+                isClearable
+                onClear={() => setSearch("")}
+                startContent={<SearchIcon />}
+                classNames={{ inputWrapper: "bg-white h-8", input: "text-xs" }}
+              />
+            </div>
+
+            {/* 新規投稿ボタン: デスクトップのみ右端 */}
+            {newPostHref && (
+              <div className="ml-auto hidden md:block">
+                <AppButton as={Link} href={newPostHref} className="shrink-0" startContent={<PlusIcon />}>
+                  気軽に投稿
+                </AppButton>
+              </div>
             )}
           </div>
 
-          {/* キーワード */}
-          <div className="mb-5">
-            <p className="text-[11px] font-semibold text-default-400 uppercase tracking-wider mb-2">
-              キーワード
-            </p>
+          {/* モバイル: 検索バー (全幅) */}
+          <div className="md:hidden mb-2">
             <Input
-              placeholder="タイトル・本文で検索"
+              placeholder="キーワード検索..."
               value={search}
               onValueChange={setSearch}
               size="sm"
@@ -277,183 +278,130 @@ export function PostsPageClient({
               isClearable
               onClear={() => setSearch("")}
               startContent={<SearchIcon />}
+              classNames={{ inputWrapper: "bg-white h-10", input: "text-sm" }}
             />
           </div>
 
-          {/* 種別 */}
-          <div className="mb-5">
-            <p className="text-[11px] font-semibold text-default-400 uppercase tracking-wider mb-2">
-              種別
-            </p>
-            <div className="flex flex-col gap-1">
+          {/* タブフィルター: モバイルは横スクロール */}
+          <div className="flex items-center gap-2">
+            <div className="flex gap-2 overflow-x-auto scrollbar-hide flex-1 pb-0.5">
               {TABS.map((t) => (
                 <button
                   type="button"
                   key={t.key}
                   onClick={() => handleTabChange(t.key)}
-                  className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium text-left transition-all ${
+                  className={`shrink-0 px-3 py-2 rounded-full text-xs font-medium transition-all min-h-[36px] ${
                     tab === t.key
-                      ? "bg-primary-50 text-primary-700 border border-primary-200"
-                      : "text-default-600 hover:bg-default-50 border border-transparent"
+                      ? "bg-primary text-white shadow-sm"
+                      : "bg-white border border-default-200 text-default-600 hover:bg-default-50 hover:border-default-300"
                   }`}
                 >
-                  <span
-                    className={`w-2 h-2 rounded-full shrink-0 ${t.color}`}
-                  />
-                  <span className="flex-1">{t.label}</span>
-                  {tab === t.key && <CheckIcon />}
+                  {t.label}
                 </button>
               ))}
-            </div>
-          </div>
-
-          {/* クリアボタン */}
-          <Button
-            variant="flat"
-            size="sm"
-            className="w-full text-default-500"
-            onPress={handleClearSearch}
-            isDisabled={!hasActiveFilter}
-          >
-            条件をクリア
-          </Button>
-        </div>
-      </div>
-
-      {/* ============================================================
-          中央カラム: 案件一覧エリア (36%)
-      ============================================================ */}
-      <div
-        className={`
-          shrink-0 flex flex-col
-          h-full overflow-y-auto
-          w-full lg:w-[36%]
-          border-x border-default-100 px-4
-          ${isMobileDetail ? "hidden lg:flex" : "flex"}
-        `}
-      >
-        {/* カラムヘッダー */}
-        <div className="flex items-start justify-between mb-3">
-          <div>
-            <h1 className="text-base font-bold text-default-900">案件一覧</h1>
-            <p className="text-xs text-default-400 mt-0.5">
-              {isLoading ? "読み込み中..." : `${posts.length}件`}
-            </p>
-          </div>
-          {newPostHref && (
-            <AppButton
-              as={Link}
-              href={newPostHref}
-              className="shrink-0"
-              startContent={<PlusIcon />}
-            >
-              気軽に投稿
-            </AppButton>
-          )}
-        </div>
-
-        {/* モバイル用: 検索 + タブ */}
-        <div className="lg:hidden mb-3 space-y-2">
-          <Input
-            placeholder="検索..."
-            value={search}
-            onValueChange={setSearch}
-            size="sm"
-            isClearable
-            onClear={() => setSearch("")}
-            startContent={<SearchIcon />}
-          />
-          <div className="flex gap-1 border-b border-default-100">
-            {TABS.map((t) => (
-              <button
-                type="button"
-                key={t.key}
-                onClick={() => handleTabChange(t.key)}
-                className={`px-3 py-1.5 text-xs font-medium border-b-2 transition-colors ${
-                  tab === t.key
-                    ? "border-primary text-primary"
-                    : "border-transparent text-default-500 hover:text-default-800"
-                }`}
-              >
-                {t.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* 案件リスト: 2カラムグリッド */}
-        <div className="pb-6">
-          {isLoading ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {Array.from({ length: 6 }).map((_, i) => (
-                // eslint-disable-next-line react/no-array-index-key
-                <div
-                  key={i}
-                  className="bg-white rounded-xl animate-pulse border border-default-100"
-                  style={{ minHeight: "320px" }}
-                />
-              ))}
-            </div>
-          ) : posts.length === 0 ? (
-            <div className="text-center py-16 text-default-400">
-              <div className="text-4xl mb-3 select-none">🔍</div>
-              <p className="text-sm">案件が見つかりませんでした</p>
-              {search && (
-                <p className="text-xs mt-1">キーワードを変えてみてください</p>
+              {hasActiveFilter && (
+                <button
+                  type="button"
+                  onClick={handleClearSearch}
+                  className="shrink-0 px-3 py-2 rounded-full text-xs font-medium transition-all min-h-[36px] bg-white border border-default-200 text-default-500 hover:bg-default-50"
+                >
+                  クリア
+                </button>
               )}
             </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {posts.map((post) => (
-                <PostListItem
-                  key={post.id}
-                  post={post}
-                  isSelected={post.id === selectedPostId}
-                  onClick={() => handleSelectPost(post)}
-                  appliedTypes={applicationsByPostId.get(post.id)}
-                />
-              ))}
-            </div>
-          )}
+          </div>
+        </div>
+
+        {/* ============================================================
+            案件グリッド: デスクトップは内部スクロール、モバイルは自然スクロール
+        ============================================================ */}
+        <div className="md:flex-1 md:overflow-y-auto pt-2">
+          <div className="pb-24 md:pb-6">
+            {isLoading ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {["sk-a", "sk-b", "sk-c", "sk-d", "sk-e", "sk-f"].map((key) => (
+                  <div
+                    key={key}
+                    className="bg-white rounded-xl animate-pulse border border-default-100"
+                    style={{ height: "220px" }}
+                  />
+                ))}
+              </div>
+            ) : posts.length === 0 ? (
+              <div className="text-center py-16 text-default-400">
+                <div className="text-4xl mb-3 select-none">🔍</div>
+                <p className="text-sm">案件が見つかりませんでした</p>
+                {search && (
+                  <p className="text-xs mt-1">キーワードを変えてみてください</p>
+                )}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {posts.map((post) => (
+                  <PostListItem
+                    key={post.id}
+                    post={post}
+                    isSelected={post.id === selectedPostId}
+                    onClick={() => handleSelectPost(post)}
+                    appliedTypes={applicationsByPostId.get(post.id)}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
       {/* ============================================================
-          右カラム: 案件詳細エリア (37%)
+          フローティング投稿ボタン (モバイルのみ)
       ============================================================ */}
-      <div
-        className={`
-          flex-1 min-w-0 pl-4 pb-6
-          h-full overflow-y-auto
-          ${isMobileDetail ? "block" : "hidden lg:block"}
-        `}
-      >
-        {/* モバイル: 一覧に戻るボタン */}
-        {isMobileDetail && (
-          <Button
-            variant="flat"
-            size="sm"
-            onPress={handleBackToList}
-            className="mb-4 lg:hidden"
-          >
-            ← 一覧に戻る
-          </Button>
-        )}
+      {newPostHref && (
+        <Link
+          href={newPostHref}
+          className="fixed bottom-6 right-4 z-30 md:hidden w-14 h-14 bg-primary text-white rounded-full shadow-lg flex items-center justify-center hover:bg-primary/90 active:scale-95 transition-transform"
+          aria-label="気軽に投稿"
+        >
+          <PlusIcon />
+        </Link>
+      )}
 
-        {selectedPost ? (
-          <PostDetailPane
-            post={selectedPost}
-            onApplicationSuccess={handleApplicationSuccess}
-          />
-        ) : (
-          <div className="hidden lg:flex items-center justify-center h-64 bg-white rounded-xl border border-default-100 text-default-400">
-            <div className="text-center">
-              <div className="text-5xl mb-3 select-none">📋</div>
-              <p className="text-sm">左の一覧から案件を選択してください</p>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
+      {/* ============================================================
+          案件詳細ドロワー (右からスライド)
+      ============================================================ */}
+      <Drawer
+        isOpen={isDrawerOpen}
+        onClose={handleCloseDrawer}
+        placement="right"
+        size="lg"
+        backdrop="opaque"
+        scrollBehavior="inside"
+        classNames={{
+          closeButton:
+            "right-4 top-4 h-8 w-8 min-w-8 rounded-full text-default-400 hover:text-default-700 hover:bg-default-100",
+        }}
+      >
+        <DrawerContent>
+          {() => (
+            <>
+              <DrawerHeader className="flex items-center border-b border-default-100 pb-3 pr-14">
+                <span className="text-base font-bold text-default-900">案件詳細</span>
+              </DrawerHeader>
+              <DrawerBody className="p-0">
+                {selectedPost ? (
+                  <PostDetailPane
+                    post={selectedPost}
+                    onApplicationSuccess={handleApplicationSuccess}
+                  />
+                ) : (
+                  <div className="flex items-center justify-center h-48 text-default-400">
+                    <p className="text-sm">読み込み中...</p>
+                  </div>
+                )}
+              </DrawerBody>
+            </>
+          )}
+        </DrawerContent>
+      </Drawer>
+    </>
   );
 }
