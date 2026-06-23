@@ -2555,7 +2555,7 @@ create policy "application_messages: 当事者SELECT"
       join public.company_members cm on cm.company_id = p.company_id
       where a.id = application_id
         and cm.user_id = auth.uid()
-        and cm.role in ('ADMIN', 'OWNER')
+        and cm.role = 'ADMIN'
         and cm.status = 'active'
     )
     or public.get_user_role() = 'MASTER_ADMIN'
@@ -2575,7 +2575,7 @@ create policy "application_messages: 当事者INSERT"
         join public.company_members cm on cm.company_id = p.company_id
         where a.id = application_id
           and cm.user_id = auth.uid()
-          and cm.role in ('ADMIN', 'OWNER')
+          and cm.role = 'ADMIN'
           and cm.status = 'active'
       )
     )
@@ -2593,7 +2593,7 @@ create policy "application_messages: 既読UPDATE"
       join public.company_members cm on cm.company_id = p.company_id
       where a.id = application_id
         and cm.user_id = auth.uid()
-        and cm.role in ('ADMIN', 'OWNER')
+        and cm.role = 'ADMIN'
         and cm.status = 'active'
     )
     or public.get_user_role() = 'MASTER_ADMIN'
@@ -2751,14 +2751,14 @@ create policy "admin_notes: ADMIN以上SELECT"
 create policy "admin_notes: ADMIN以上INSERT"
   on public.admin_notes for insert
   with check (
-    created_by = auth.uid()
+    admin_id = auth.uid()
     and public.get_user_role() in ('ADMIN', 'MASTER_ADMIN')
   );
 
 create policy "admin_notes: 作成者UPDATE"
   on public.admin_notes for update
-  using (created_by = auth.uid() or public.get_user_role() = 'MASTER_ADMIN')
-  with check (created_by = auth.uid() or public.get_user_role() = 'MASTER_ADMIN');
+  using (admin_id = auth.uid() or public.get_user_role() = 'MASTER_ADMIN')
+  with check (admin_id = auth.uid() or public.get_user_role() = 'MASTER_ADMIN');
 
 create policy "admin_notes: MASTER_ADMIN DELETE"
   on public.admin_notes for delete
@@ -2768,7 +2768,7 @@ create policy "admin_notes: MASTER_ADMIN DELETE"
 create policy "announcements: 公開済みSELECT"
   on public.announcements for select
   using (
-    is_published = true
+    is_active = true
     or public.get_user_role() in ('ADMIN', 'MASTER_ADMIN')
   );
 
@@ -2792,7 +2792,7 @@ create policy "moderation_actions: ADMIN以上SELECT"
 create policy "moderation_actions: ADMIN以上INSERT"
   on public.moderation_actions for insert
   with check (
-    actioned_by = auth.uid()
+    moderator_id = auth.uid()
     and public.get_user_role() in ('ADMIN', 'MASTER_ADMIN')
   );
 
@@ -2820,8 +2820,7 @@ create policy "feature_flags: MASTER_ADMIN全操作"
 create policy "contracts: 当事者SELECT"
   on public.contracts for select
   using (
-    client_user_id = auth.uid()
-    or worker_user_id = auth.uid()
+    contractor_user_id = auth.uid()
     or exists (
       select 1 from public.company_members cm
       where cm.company_id = company_id
@@ -2836,6 +2835,25 @@ create policy "contracts: MASTER_ADMIN全操作"
   using (public.get_user_role() = 'MASTER_ADMIN')
   with check (public.get_user_role() = 'MASTER_ADMIN');
 
+-- ADMIN: 自社のcontractを作成・更新可能
+create policy "contracts: ADMIN INSERT"
+  on public.contracts for insert
+  with check (
+    public.get_user_role() = 'ADMIN'
+    and company_id = any(public.get_user_company_ids())
+  );
+
+create policy "contracts: ADMIN UPDATE"
+  on public.contracts for update
+  using (
+    public.get_user_role() = 'ADMIN'
+    and company_id = any(public.get_user_company_ids())
+  )
+  with check (
+    public.get_user_role() = 'ADMIN'
+    and company_id = any(public.get_user_company_ids())
+  );
+
 -- ── contract_status_histories ────────────────────────────────
 create policy "contract_status_histories: 当事者SELECT"
   on public.contract_status_histories for select
@@ -2843,9 +2861,23 @@ create policy "contract_status_histories: 当事者SELECT"
     exists (
       select 1 from public.contracts c
       where c.id = contract_id
-        and (c.client_user_id = auth.uid() or c.worker_user_id = auth.uid()
+        and (c.contractor_user_id = auth.uid()
+             or exists (
+               select 1 from public.company_members cm
+               where cm.company_id = c.company_id
+                 and cm.user_id = auth.uid()
+                 and cm.status = 'active'
+             )
              or public.get_user_role() = 'MASTER_ADMIN')
     )
+  );
+
+-- ADMIN: 自社contractのステータス変更履歴を記録可能
+create policy "contract_status_histories: ADMIN INSERT"
+  on public.contract_status_histories for insert
+  with check (
+    changed_by = auth.uid()
+    and public.get_user_role() in ('ADMIN', 'MASTER_ADMIN')
   );
 
 -- ── deliverables ─────────────────────────────────────────────
@@ -2855,17 +2887,23 @@ create policy "deliverables: 当事者SELECT"
     exists (
       select 1 from public.contracts c
       where c.id = contract_id
-        and (c.client_user_id = auth.uid() or c.worker_user_id = auth.uid()
+        and (c.contractor_user_id = auth.uid()
+             or exists (
+               select 1 from public.company_members cm
+               where cm.company_id = c.company_id
+                 and cm.user_id = auth.uid()
+                 and cm.status = 'active'
+             )
              or public.get_user_role() = 'MASTER_ADMIN')
     )
   );
 
-create policy "deliverables: ワーカーINSERT/UPDATE"
+create policy "deliverables: ワーカーINSERT"
   on public.deliverables for insert
   with check (
     exists (
       select 1 from public.contracts c
-      where c.id = contract_id and c.worker_user_id = auth.uid()
+      where c.id = contract_id and c.contractor_user_id = auth.uid()
     )
     or public.get_user_role() = 'MASTER_ADMIN'
   );
@@ -2876,7 +2914,13 @@ create policy "deliverables: 当事者UPDATE"
     exists (
       select 1 from public.contracts c
       where c.id = contract_id
-        and (c.client_user_id = auth.uid() or c.worker_user_id = auth.uid())
+        and (c.contractor_user_id = auth.uid()
+             or exists (
+               select 1 from public.company_members cm
+               where cm.company_id = c.company_id
+                 and cm.user_id = auth.uid()
+                 and cm.status = 'active'
+             ))
     )
     or public.get_user_role() = 'MASTER_ADMIN'
   );
@@ -2889,28 +2933,52 @@ create policy "deliverable_files: 当事者SELECT"
       select 1 from public.deliverables d
       join public.contracts c on c.id = d.contract_id
       where d.id = deliverable_id
-        and (c.client_user_id = auth.uid() or c.worker_user_id = auth.uid()
+        and (c.contractor_user_id = auth.uid()
+             or exists (
+               select 1 from public.company_members cm
+               where cm.company_id = c.company_id
+                 and cm.user_id = auth.uid()
+                 and cm.status = 'active'
+             )
              or public.get_user_role() = 'MASTER_ADMIN')
     )
   );
 
 create policy "deliverable_files: アップロードINSERT"
   on public.deliverable_files for insert
-  with check (uploaded_by = auth.uid());
+  with check (
+    exists (
+      select 1 from public.deliverables d
+      where d.id = deliverable_id and d.submitted_by = auth.uid()
+    )
+    or public.get_user_role() = 'MASTER_ADMIN'
+  );
 
 create policy "deliverable_files: アップロード者DELETE"
   on public.deliverable_files for delete
-  using (uploaded_by = auth.uid() or public.get_user_role() = 'MASTER_ADMIN');
+  using (
+    exists (
+      select 1 from public.deliverables d
+      where d.id = deliverable_id and d.submitted_by = auth.uid()
+    )
+    or public.get_user_role() = 'MASTER_ADMIN'
+  );
 
 -- ── disputes ─────────────────────────────────────────────────
 create policy "disputes: 当事者SELECT"
   on public.disputes for select
   using (
-    initiated_by = auth.uid()
+    raised_by = auth.uid()
     or exists (
       select 1 from public.contracts c
       where c.id = contract_id
-        and (c.client_user_id = auth.uid() or c.worker_user_id = auth.uid())
+        and (c.contractor_user_id = auth.uid()
+             or exists (
+               select 1 from public.company_members cm
+               where cm.company_id = c.company_id
+                 and cm.user_id = auth.uid()
+                 and cm.status = 'active'
+             ))
     )
     or public.get_user_role() in ('ADMIN', 'MASTER_ADMIN')
   );
@@ -2918,11 +2986,17 @@ create policy "disputes: 当事者SELECT"
 create policy "disputes: 当事者INSERT"
   on public.disputes for insert
   with check (
-    initiated_by = auth.uid()
+    raised_by = auth.uid()
     and exists (
       select 1 from public.contracts c
       where c.id = contract_id
-        and (c.client_user_id = auth.uid() or c.worker_user_id = auth.uid())
+        and (c.contractor_user_id = auth.uid()
+             or exists (
+               select 1 from public.company_members cm
+               where cm.company_id = c.company_id
+                 and cm.user_id = auth.uid()
+                 and cm.status = 'active'
+             ))
     )
   );
 
@@ -2939,9 +3013,14 @@ create policy "dispute_messages: 当事者SELECT"
       select 1 from public.disputes d
       join public.contracts c on c.id = d.contract_id
       where d.id = dispute_id
-        and (d.initiated_by = auth.uid()
-             or c.client_user_id = auth.uid()
-             or c.worker_user_id = auth.uid()
+        and (d.raised_by = auth.uid()
+             or c.contractor_user_id = auth.uid()
+             or exists (
+               select 1 from public.company_members cm
+               where cm.company_id = c.company_id
+                 and cm.user_id = auth.uid()
+                 and cm.status = 'active'
+             )
              or public.get_user_role() in ('ADMIN', 'MASTER_ADMIN'))
     )
   );
@@ -2949,7 +3028,7 @@ create policy "dispute_messages: 当事者SELECT"
 create policy "dispute_messages: 当事者INSERT"
   on public.dispute_messages for insert
   with check (
-    sender_user_id = auth.uid()
+    sender_id = auth.uid()
     and (
       not is_internal
       or public.get_user_role() in ('ADMIN', 'MASTER_ADMIN')
@@ -2963,21 +3042,21 @@ create policy "reviews: 全員SELECT"
 
 create policy "reviews: 本人INSERT"
   on public.reviews for insert
-  with check (reviewer_user_id = auth.uid());
+  with check (reviewer_id = auth.uid());
 
 -- ── review_replies ───────────────────────────────────────────
 create policy "review_replies: 全員SELECT"
   on public.review_replies for select
   using (auth.role() = 'authenticated');
 
-create policy "review_replies: 本人INSERT/UPDATE"
+create policy "review_replies: 本人INSERT"
   on public.review_replies for insert
-  with check (replied_by = auth.uid());
+  with check (author_id = auth.uid());
 
 create policy "review_replies: 本人UPDATE"
   on public.review_replies for update
-  using (replied_by = auth.uid())
-  with check (replied_by = auth.uid());
+  using (author_id = auth.uid())
+  with check (author_id = auth.uid());
 
 -- ── user_scores ──────────────────────────────────────────────
 create policy "user_scores: 全員SELECT"
@@ -3012,7 +3091,13 @@ create policy "point_rules: MASTER_ADMIN全操作"
 -- ── point_expirations ────────────────────────────────────────
 create policy "point_expirations: 本人SELECT"
   on public.point_expirations for select
-  using (user_id = auth.uid() or public.get_user_role() = 'MASTER_ADMIN');
+  using (
+    exists (
+      select 1 from public.wallets w
+      where w.id = wallet_id and w.user_id = auth.uid()
+    )
+    or public.get_user_role() = 'MASTER_ADMIN'
+  );
 
 -- ── point_grants ─────────────────────────────────────────────
 create policy "point_grants: 本人SELECT"
@@ -3174,7 +3259,7 @@ create policy "coupon_redemptions: 本人INSERT"
 create policy "invoices: 本人SELECT"
   on public.invoices for select
   using (
-    issued_to_user_id = auth.uid()
+    user_id = auth.uid()
     or public.get_user_role() in ('ADMIN', 'MASTER_ADMIN')
   );
 

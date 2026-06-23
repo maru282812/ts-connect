@@ -30,9 +30,14 @@ export default async function CompanyLayout({
   }
 
   const displayName = profile.display_name ?? "管理者";
+  const systemRole = profile.system_role;
 
   return (
-    <CompanyShell displayName={displayName} email={user.email ?? ""}>
+    <CompanyShell
+      displayName={displayName}
+      email={user.email ?? ""}
+      systemRole={systemRole}
+    >
       {children}
     </CompanyShell>
   );
