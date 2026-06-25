@@ -5,7 +5,13 @@
       "Bash(Select-Object -ExpandProperty Name)",
       "Bash(Get-ChildItem -Path \"c:\\\\work\\\\ts-connect\" -Recurse -Directory)",
       "Bash(Select-Object -ExpandProperty FullName)",
-      "PowerShell(head -30)"
+      "PowerShell(head -30)",
+      "Read(//c/Users/PC_User/.claude/projects/c--work-ts-connect/memory/**)",
+      "Bash(awk '/create table if not exists public.post_files /,/\\\\\\);/' supabase/001_schema.sql)",
+      "Bash(awk '/create table if not exists public.post_tags /,/\\\\\\);/' supabase/001_schema.sql)",
+      "Bash(awk '/create table if not exists public.post_tag_relations /,/\\\\\\);/' supabase/001_schema.sql)",
+      "Bash(awk '/create table if not exists public.post_reports /,/\\\\\\);/' supabase/001_schema.sql)",
+      "Bash(awk '/create table if not exists public.departments /,/\\\\\\);/' supabase/001_schema.sql)"
     ]
   }
 }
