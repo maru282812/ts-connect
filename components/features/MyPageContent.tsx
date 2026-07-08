@@ -17,6 +17,7 @@ import {
 } from "@/components/common/FormField";
 import { AppButton } from "@/components/ui/AppButton";
 import { FormField } from "@/components/ui/FormField";
+import { fetchMyProfile, saveMyProfile } from "@/lib/profile";
 import { createClient } from "@/lib/supabase/client";
 import type { Company } from "@/types/database";
 
@@ -26,7 +27,7 @@ const PASSWORD_FORM_ID = "mypage-password-form";
 // 第1弾リリースの表示制御（memory/release_scope_phase1.md）。次フェーズで true に戻す。
 const SHOW_DEPARTMENT_POSITION = false; // 部署・役職
 const SHOW_NOTIFICATIONS_TAB = false; // 通知設定タブ
-const SHOW_SKILLS_SECTION = false; // スキル・タグ（社内SNS関連のみのため非表示）
+const SHOW_SKILLS_SECTION = true; // スキル・タグ（Phase2 マイページ拡張で公開）
 
 const TABS = [
   { key: "profile", label: "プロフィール" },
@@ -84,6 +85,78 @@ function SectionCard({
       </div>
       {children}
     </section>
+  );
+}
+
+// --- チップ入力（スキル・特技・趣味 共通） ---
+function ChipListInput({
+  label,
+  chips,
+  onRemove,
+  inputValue,
+  onInputChange,
+  onAdd,
+  placeholder,
+  suggestions,
+}: {
+  label: string;
+  chips: string[];
+  onRemove: (value: string) => void;
+  inputValue: string;
+  onInputChange: (v: string) => void;
+  onAdd: (v: string) => void;
+  placeholder: string;
+  suggestions?: string[];
+}) {
+  return (
+    <div className="space-y-2">
+      <span className="text-sm font-semibold text-slate-700">{label}</span>
+      {chips.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {chips.map((s) => (
+            <Chip
+              key={s}
+              color="primary"
+              variant="solid"
+              onClose={() => onRemove(s)}
+            >
+              {s}
+            </Chip>
+          ))}
+        </div>
+      )}
+      <Input
+        value={inputValue}
+        onValueChange={onInputChange}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            onAdd(inputValue);
+          }
+        }}
+        placeholder={placeholder}
+        variant="bordered"
+        size="lg"
+        classNames={formInputClasses}
+      />
+      {suggestions && suggestions.length > 0 && (
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+          <p className="mb-2 text-[11px] text-slate-400">サジェスト：</p>
+          <div className="flex flex-wrap gap-2">
+            {suggestions.map((s) => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => onAdd(s)}
+                className="rounded border border-slate-300 px-2 py-0.5 text-[11px] text-slate-600 transition-colors hover:border-blue-500 hover:bg-blue-50"
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -153,6 +226,13 @@ export function MyPageContent() {
   const [skills, setSkills] = useState<string[]>([]);
   const [skillInput, setSkillInput] = useState("");
   const SKILL_SUGGESTIONS = ["UI/UXデザイン", "アジャイル開発", "市場調査"];
+  // Phase2: 特技 / 趣味 / 興味テーマ / 相談に乗れること（user_profiles へ保存）
+  const [specialSkills, setSpecialSkills] = useState<string[]>([]);
+  const [specialSkillInput, setSpecialSkillInput] = useState("");
+  const [hobbies, setHobbies] = useState<string[]>([]);
+  const [hobbyInput, setHobbyInput] = useState("");
+  const [interestThemes, setInterestThemes] = useState("");
+  const [consultTopics, setConsultTopics] = useState("");
 
   // --- タブ（U-09: 4タブ）→ 該当セクションへスクロール ---
   const [activeTab, setActiveTab] = useState<TabKey>("profile");
@@ -204,6 +284,21 @@ export function MyPageContent() {
       .limit(1)
       .single();
     if (memberData?.company_id) setCompanyId(memberData.company_id);
+
+    // Phase2: user_profiles（スキル・特技・趣味・興味テーマ・相談可否）を復元。
+    // 行が無い / migration 028 未適用時は null で返り、フォームは空のまま。
+    const profile = await fetchMyProfile();
+    if (profile) {
+      setBio(profile.bio ?? "");
+      setSkills(profile.skills ?? []);
+      setSpecialSkills(profile.special_skills ?? []);
+      setHobbies(profile.hobbies ?? []);
+      setInterestThemes(profile.interest_themes ?? "");
+      setConsultTopics(profile.consult_topics ?? "");
+      setAvailable(
+        profile.availability ? profile.availability === "AVAILABLE" : true,
+      );
+    }
   }, []);
 
   useEffect(() => {
@@ -326,6 +421,24 @@ export function MyPageContent() {
         }
       }
 
+      // Phase2: user_profiles（スキル・特技・趣味・興味テーマ・相談可否）を保存。
+      // メール変更時は下で早期 return するため、その前に保存しておく。
+      const profileResult = await saveMyProfile({
+        bio,
+        skills,
+        specialSkills,
+        hobbies,
+        interestThemes,
+        consultTopics,
+        availability: available ? "AVAILABLE" : "UNAVAILABLE",
+      });
+      if (!profileResult.ok) {
+        setProfileError(
+          profileResult.error ?? "プロフィールの保存に失敗しました",
+        );
+        return;
+      }
+
       if (emailChanged) {
         const { error: emailError } = await supabase.auth.updateUser(
           { email: trimmedEmail },
@@ -382,6 +495,19 @@ export function MyPageContent() {
     if (!v || skills.includes(v)) return;
     setSkills((prev) => [...prev, v]);
     setSkillInput("");
+  };
+
+  // 汎用チップ追加（特技 / 趣味）。重複・空文字は無視する。
+  const addChip = (
+    value: string,
+    list: string[],
+    setList: React.Dispatch<React.SetStateAction<string[]>>,
+    clearInput: () => void,
+  ) => {
+    const v = value.trim();
+    if (!v || list.includes(v)) return;
+    setList((prev) => [...prev, v]);
+    clearInput();
   };
 
   const companyName = useMemo(
@@ -636,80 +762,69 @@ export function MyPageContent() {
                 title="スキル・タグ設定"
               >
                 <div className="space-y-6">
-                  <div className="space-y-2">
-                    <span className="text-sm font-semibold text-slate-700">
-                      得意分野
-                    </span>
-                    {skills.length > 0 && (
-                      <div className="flex flex-wrap gap-2">
-                        {skills.map((s) => (
-                          <Chip
-                            key={s}
-                            color="primary"
-                            variant="solid"
-                            onClose={() =>
-                              setSkills((prev) => prev.filter((x) => x !== s))
-                            }
-                          >
-                            {s}
-                          </Chip>
-                        ))}
-                      </div>
-                    )}
-                    <Input
-                      value={skillInput}
-                      onValueChange={setSkillInput}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault();
-                          addSkill(skillInput);
-                        }
-                      }}
-                      placeholder="キーワードを入力して Enter..."
-                      variant="bordered"
-                      size="lg"
-                      classNames={formInputClasses}
-                    />
-                    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-                      <p className="mb-2 text-[11px] text-slate-400">
-                        サジェスト：
-                      </p>
-                      <div className="flex flex-wrap gap-2">
-                        {SKILL_SUGGESTIONS.map((s) => (
-                          <button
-                            key={s}
-                            type="button"
-                            onClick={() => addSkill(s)}
-                            className="rounded border border-slate-300 px-2 py-0.5 text-[11px] text-slate-600 transition-colors hover:border-blue-500 hover:bg-blue-50"
-                          >
-                            {s}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
+                  <ChipListInput
+                    label="得意分野（スキル）"
+                    chips={skills}
+                    onRemove={(s) =>
+                      setSkills((prev) => prev.filter((x) => x !== s))
+                    }
+                    inputValue={skillInput}
+                    onInputChange={setSkillInput}
+                    onAdd={addSkill}
+                    placeholder="キーワードを入力して Enter..."
+                    suggestions={SKILL_SUGGESTIONS}
+                  />
                   <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                    <FormField label="特技">
-                      <Input
-                        placeholder="例: プレゼンテーション, 中国語"
-                        variant="bordered"
-                        size="lg"
-                        classNames={formInputClasses}
-                      />
-                    </FormField>
-                    <FormField label="趣味">
-                      <Input
-                        placeholder="例: キャンプ, サウナ"
-                        variant="bordered"
-                        size="lg"
-                        classNames={formInputClasses}
-                      />
-                    </FormField>
+                    <ChipListInput
+                      label="特技"
+                      chips={specialSkills}
+                      onRemove={(s) =>
+                        setSpecialSkills((prev) => prev.filter((x) => x !== s))
+                      }
+                      inputValue={specialSkillInput}
+                      onInputChange={setSpecialSkillInput}
+                      onAdd={(v) =>
+                        addChip(v, specialSkills, setSpecialSkills, () =>
+                          setSpecialSkillInput(""),
+                        )
+                      }
+                      placeholder="例: プレゼンテーション（Enter で追加）"
+                    />
+                    <ChipListInput
+                      label="趣味"
+                      chips={hobbies}
+                      onRemove={(s) =>
+                        setHobbies((prev) => prev.filter((x) => x !== s))
+                      }
+                      inputValue={hobbyInput}
+                      onInputChange={setHobbyInput}
+                      onAdd={(v) =>
+                        addChip(v, hobbies, setHobbies, () => setHobbyInput(""))
+                      }
+                      placeholder="例: キャンプ（Enter で追加）"
+                    />
                   </div>
                   <FormField label="興味テーマ">
                     <Textarea
+                      value={interestThemes}
+                      onValueChange={setInterestThemes}
                       minRows={2}
                       placeholder="今後関わってみたいプロジェクトや、今学んでいること"
+                      variant="bordered"
+                      classNames={{
+                        inputWrapper: "border-slate-300 hover:border-slate-400",
+                      }}
+                    />
+                  </FormField>
+                  <FormField
+                    label="相談に乗れること"
+                    description="社員検索で「相談OK」の人として表示され、相談内容の目安になります"
+                  >
+                    <Textarea
+                      value={consultTopics}
+                      onValueChange={setConsultTopics}
+                      minRows={2}
+                      placeholder="例: キャリア相談、Figmaの使い方、資料作成のコツ"
                       variant="bordered"
                       classNames={{
                         inputWrapper: "border-slate-300 hover:border-slate-400",
