@@ -1,9 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/common/PageHeader";
 import { AppButton } from "@/components/ui/AppButton";
+import {
+  fetchIssuesForAdmin,
+  NEWSLETTER_CATEGORY_LABEL,
+} from "@/lib/newsletter";
 
 // ============================================================
 // 社内報 管理一覧（管理画面 / company surface）
@@ -85,8 +89,34 @@ function categoryBadgeClass(category: string): string {
 export function NewsletterAdminClient() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"ALL" | IssueStatus>("ALL");
+  // migration 029 未適用/失敗時は fetch が null を返すため、仮データ ROWS にフォールバック。
+  const [rows, setRows] = useState<NewsletterRow[]>(ROWS);
 
-  const filtered = ROWS.filter((r) => {
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const data = await fetchIssuesForAdmin();
+      if (!active || data === null) return; // null=未適用 → 仮データ維持
+      setRows(
+        data.map((i) => ({
+          id: i.id,
+          title: i.title,
+          category: NEWSLETTER_CATEGORY_LABEL[i.category],
+          dateLabel: i.publishedAt
+            ? new Date(i.publishedAt).toLocaleDateString("ja-JP")
+            : "—",
+          status: i.status,
+          views: i.viewCount,
+          pickup: i.isPickup,
+        })),
+      );
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const filtered = rows.filter((r) => {
     if (statusFilter !== "ALL" && r.status !== statusFilter) return false;
     if (search.trim() && !r.title.includes(search.trim())) return false;
     return true;
@@ -197,19 +227,19 @@ export function NewsletterAdminClient() {
                       </td>
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-3">
-                          <button
-                            type="button"
+                          <Link
+                            href={`/app/newsletter/${r.id}`}
                             className="text-xs text-primary hover:underline"
                           >
                             詳細
-                          </button>
+                          </Link>
                           <span className="text-default-200">|</span>
-                          <button
-                            type="button"
+                          <Link
+                            href={`/company/newsletter/${r.id}/edit`}
                             className="text-xs text-blue-600 hover:underline"
                           >
                             編集
-                          </button>
+                          </Link>
                         </div>
                       </td>
                     </tr>

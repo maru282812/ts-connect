@@ -1,12 +1,16 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import {
+  fetchPublishedIssues,
+  NEWSLETTER_CATEGORY_LABEL,
+} from "@/lib/newsletter";
+
 // ============================================================
 // 社内報 右サイドパネル（社内SNS タイムラインの補助情報枠）
 // 設置先: components/screens/CommunityFeedClient.tsx の右カラム
-// ※ 現状は社内報データモデルがDBに無いため仮データで表示。
-//   将来の DB/API 接続を見越し、型定義 + 定数で分離している。
-//   差し替えポイント: LATEST_ISSUE / PICKUP_ARTICLES を
-//   /api/newsletter/* 等の取得結果に置き換えるだけで配線可能。
+// ※ migration 029 適用後は公開済みの号を表示。未適用/失敗時は仮データにフォールバック。
+//   （fetchPublishedIssues が null を返したら LATEST_ISSUE / PICKUP_ARTICLES を維持）
 // 配色は CommunityFeedClient のハウススタイル（slate / blue-600）に準拠。
 // ============================================================
 
@@ -79,6 +83,46 @@ function categoryBadgeClass(category: string): string {
 }
 
 export function CompanyNewsPanel() {
+  // 仮データを初期値に。029 適用後は公開済みの号で置き換える。
+  const [latest, setLatest] = useState<NewsletterIssue>(LATEST_ISSUE);
+  const [pickups, setPickups] = useState<PickupArticle[]>(PICKUP_ARTICLES);
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const issues = await fetchPublishedIssues();
+      if (!active || issues === null || issues.length === 0) return;
+      const [head, ...rest] = issues;
+      setLatest({
+        id: head.id,
+        title: head.title,
+        category: NEWSLETTER_CATEGORY_LABEL[head.category],
+        dateLabel: head.publishedAt
+          ? new Date(head.publishedAt).toLocaleDateString("ja-JP")
+          : "",
+        summary: head.summary,
+        href: `/app/newsletter/${head.id}`,
+      });
+      setPickups(
+        rest
+          .filter((i) => i.isPickup)
+          .slice(0, 3)
+          .map((i) => ({
+            id: i.id,
+            title: i.title,
+            category: NEWSLETTER_CATEGORY_LABEL[i.category],
+            dateLabel: i.publishedAt
+              ? new Date(i.publishedAt).toLocaleDateString("ja-JP")
+              : "",
+            href: `/app/newsletter/${i.id}`,
+          })),
+      );
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
+
   return (
     <div className="space-y-4">
       {/* 見出し */}
@@ -105,20 +149,20 @@ export function CompanyNewsPanel() {
                 LATEST_ISSUE.category,
               )}`}
             >
-              {LATEST_ISSUE.category}
+              {latest.category}
             </span>
             <span className="text-[11px] text-slate-400">
-              {LATEST_ISSUE.dateLabel}
+              {latest.dateLabel}
             </span>
           </div>
           <h3 className="text-sm font-bold leading-snug text-slate-900">
-            {LATEST_ISSUE.title}
+            {latest.title}
           </h3>
           <p className="mt-1.5 line-clamp-3 text-xs leading-relaxed text-slate-500">
-            {LATEST_ISSUE.summary}
+            {latest.summary}
           </p>
           <a
-            href={LATEST_ISSUE.href}
+            href={latest.href}
             className="mt-3 inline-flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-90"
           >
             読む
@@ -133,7 +177,7 @@ export function CompanyNewsPanel() {
           ピックアップ記事
         </h3>
         <ul className="space-y-3">
-          {PICKUP_ARTICLES.map((article) => (
+          {pickups.map((article) => (
             <li key={article.id}>
               <a
                 href={article.href}
@@ -159,15 +203,6 @@ export function CompanyNewsPanel() {
           ))}
         </ul>
       </section>
-
-      {/* 過去号一覧への導線 */}
-      <a
-        href="#"
-        className="flex items-center justify-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-medium text-slate-600 shadow-sm transition-colors hover:bg-slate-50 hover:text-blue-600"
-      >
-        過去号・記事一覧を見る
-        <ArrowRightIcon />
-      </a>
     </div>
   );
 }

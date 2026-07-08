@@ -11,46 +11,54 @@ import { ThumbnailInput } from "@/components/common/ThumbnailInput";
 import { AppButton } from "@/components/ui/AppButton";
 import { AutoResizeTextarea } from "@/components/ui/AutoResizeTextarea";
 import { FormField } from "@/components/ui/FormField";
+import {
+  createIssue,
+  NEWSLETTER_CATEGORIES,
+  NEWSLETTER_STATUSES,
+  type NewsletterCategory,
+  type NewsletterIssue,
+  type NewsletterStatus,
+  updateIssue,
+} from "@/lib/newsletter";
 
 // ============================================================
-// 社内報 新規作成フォーム（管理画面 / company surface）
-// ルート: /company/newsletter/new
-// ※ 保存ロジックは未実装。送信時は一覧 /company/newsletter へ遷移するのみ。
-//   DB/API 接続時は handleSubmit 内で insert を行い、その後 router.push する。
+// 社内報 作成・編集フォーム（管理画面 / company surface）
+// ルート: /company/newsletter/new（新規） /company/newsletter/[id]/edit（編集）
+// migration 029 未適用時は保存が RLS/テーブル欠落で失敗し、エラー表示される。
 // ============================================================
-
-const CATEGORIES = [
-  { value: "月次", label: "月次号" },
-  { value: "特集", label: "特集" },
-  { value: "ピープル", label: "ピープル" },
-  { value: "お知らせ", label: "お知らせ" },
-];
-
-const STATUSES = [
-  { value: "DRAFT", label: "下書きとして保存" },
-  { value: "PUBLISHED", label: "すぐに公開" },
-  { value: "SCHEDULED", label: "予約投稿" },
-];
 
 const LIST_PATH = "/company/newsletter";
 
-export function NewsletterForm() {
-  const router = useRouter();
+interface NewsletterFormProps {
+  issue?: NewsletterIssue;
+}
 
-  const [title, setTitle] = useState("");
-  const [category, setCategory] = useState("月次");
-  const [publishDate, setPublishDate] = useState("");
-  const [summary, setSummary] = useState("");
-  const [body, setBody] = useState("");
-  const [status, setStatus] = useState("DRAFT");
-  const [pickup, setPickup] = useState(true);
+export function NewsletterForm({ issue }: NewsletterFormProps) {
+  const router = useRouter();
+  const isEdit = Boolean(issue);
+
+  const [title, setTitle] = useState(issue?.title ?? "");
+  const [category, setCategory] = useState<NewsletterCategory>(
+    issue?.category ?? "MONTHLY",
+  );
+  const [publishDate, setPublishDate] = useState(
+    issue?.publishedAt ? issue.publishedAt.slice(0, 10) : "",
+  );
+  const [summary, setSummary] = useState(issue?.summary ?? "");
+  const [body, setBody] = useState(issue?.body ?? "");
+  const [status, setStatus] = useState<NewsletterStatus>(
+    issue?.status ?? "DRAFT",
+  );
+  const [pickup, setPickup] = useState(issue?.isPickup ?? true);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // サムネイル画像（1枚）
-  const [thumbnailUrl, setThumbnailUrl] = useState("");
+  const [thumbnailUrl, setThumbnailUrl] = useState(issue?.coverImageUrl ?? "");
   // その他写真（複数枚）。各行を ThumbnailInput で編集する。
-  const [photos, setPhotos] = useState<{ id: string; url: string }[]>([]);
+  const [photos, setPhotos] = useState<{ id: string; url: string }[]>(
+    (issue?.imageUrls ?? []).map((url, i) => ({ id: `photo-init-${i}`, url })),
+  );
 
   const addPhoto = () =>
     setPhotos((prev) => [
@@ -62,13 +70,46 @@ export function NewsletterForm() {
   const removePhoto = (id: string) =>
     setPhotos((prev) => prev.filter((p) => p.id !== id));
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!title.trim() || !body.trim()) {
+      setError("タイトルと本文は必須です");
+      return;
+    }
     setIsLoading(true);
-    // NOTE: 保存ロジックは未実装。
-    //   DB/API 接続時はここで insert 処理を行う。
-    //   現状は作成完了として一覧へ遷移する。
-    router.push(`${LIST_PATH}?success=created`);
+    setError(null);
+
+    // 発行日時: 入力があればその日付、無ければ「すぐに公開」時に現在時刻。
+    const publishedAt = publishDate
+      ? new Date(publishDate).toISOString()
+      : status === "PUBLISHED"
+        ? new Date().toISOString()
+        : null;
+
+    const input = {
+      title,
+      category,
+      summary,
+      body,
+      coverImageUrl: thumbnailUrl || null,
+      imageUrls: photos.map((p) => p.url).filter(Boolean),
+      status,
+      publishedAt,
+      isPickup: pickup,
+    };
+
+    const result =
+      isEdit && issue
+        ? await updateIssue(issue.id, input)
+        : await createIssue(input);
+
+    setIsLoading(false);
+    if (!result.ok) {
+      setError(result.error ?? "保存に失敗しました");
+      return;
+    }
+    router.push(`${LIST_PATH}?success=${isEdit ? "updated" : "created"}`);
+    router.refresh();
   };
 
   return (
@@ -83,12 +124,14 @@ export function NewsletterForm() {
           ← 社内報管理
         </button>
         <span className="text-slate-300">/</span>
-        <span className="text-slate-400">新規作成</span>
+        <span className="text-slate-400">{isEdit ? "編集" : "新規作成"}</span>
       </div>
 
       {/* ページタイトル */}
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-slate-900">社内報を新規作成</h1>
+        <h1 className="text-2xl font-bold text-slate-900">
+          {isEdit ? "社内報を編集" : "社内報を新規作成"}
+        </h1>
         <p className="text-slate-500 mt-1.5 text-sm">
           会社からのお知らせ・月次号・特集記事を作成します。公開すると社内SNSの社内報枠に掲載されます。
         </p>
@@ -129,12 +172,12 @@ export function NewsletterForm() {
                 <Select
                   selectedKeys={[category]}
                   onSelectionChange={(keys) =>
-                    setCategory(Array.from(keys)[0] as string)
+                    setCategory(Array.from(keys)[0] as NewsletterCategory)
                   }
                   variant="bordered"
                   classNames={formSelectClasses}
                 >
-                  {CATEGORIES.map((c) => (
+                  {NEWSLETTER_CATEGORIES.map((c) => (
                     <SelectItem key={c.value}>{c.label}</SelectItem>
                   ))}
                 </Select>
@@ -217,12 +260,12 @@ export function NewsletterForm() {
                 <Select
                   selectedKeys={[status]}
                   onSelectionChange={(keys) =>
-                    setStatus(Array.from(keys)[0] as string)
+                    setStatus(Array.from(keys)[0] as NewsletterStatus)
                   }
                   variant="bordered"
                   classNames={formSelectClasses}
                 >
-                  {STATUSES.map((s) => (
+                  {NEWSLETTER_STATUSES.map((s) => (
                     <SelectItem key={s.value}>{s.label}</SelectItem>
                   ))}
                 </Select>
@@ -252,7 +295,7 @@ export function NewsletterForm() {
               キャンセル
             </AppButton>
             <AppButton type="submit" isLoading={isLoading}>
-              作成する
+              {isEdit ? "更新する" : "作成する"}
             </AppButton>
           </div>
         </form>
