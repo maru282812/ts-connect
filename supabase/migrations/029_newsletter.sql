@@ -25,8 +25,10 @@ create table if not exists public.newsletter_issues (
   title           text        not null,
   category        text        not null default 'MONTHLY'
                               check (category in ('MONTHLY', 'FEATURE', 'PEOPLE', 'NOTICE')),
+  summary         text,       -- 一覧・カードに表示する短い説明
   body            text        not null default '',
   cover_image_url text,
+  image_urls      text[],     -- 本文に載せるその他写真（任意）
   status          text        not null default 'DRAFT'
                               check (status in ('DRAFT', 'PUBLISHED', 'SCHEDULED')),
   published_at    timestamptz,
