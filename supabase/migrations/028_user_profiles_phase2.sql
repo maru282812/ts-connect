@@ -18,6 +18,7 @@
 -- 1. カラム追加（特技 / 趣味 / 興味テーマ / 相談に乗れること）
 -- ============================================================
 alter table public.user_profiles
+  add column if not exists bio             text,      -- 自己紹介（マイページ既存UI／従来DB未保存）
   add column if not exists special_skills  text[],   -- 特技（例: プレゼン, 中国語）
   add column if not exists hobbies         text[],   -- 趣味（例: キャンプ, サウナ）
   add column if not exists interest_themes text,      -- 興味テーマ（自由記述）
