@@ -1,8 +1,8 @@
 "use client";
 
-import { Input, Select, SelectItem, Switch } from "@heroui/react";
+import { Chip, Input, Select, SelectItem, Switch } from "@heroui/react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   formInputClasses,
   formSelectClasses,
@@ -12,6 +12,12 @@ import { AppButton } from "@/components/ui/AppButton";
 import { AutoResizeTextarea } from "@/components/ui/AutoResizeTextarea";
 import { FormField } from "@/components/ui/FormField";
 import { isPublicStatus, POST_STATUSES } from "@/lib/postStatus";
+import {
+  fetchActiveTags,
+  fetchPostTagNames,
+  type PostTag,
+  syncPostTags,
+} from "@/lib/postTags";
 import { createClient } from "@/lib/supabase/client";
 import type { Company, Post, PostStatus } from "@/types/database";
 
@@ -53,6 +59,27 @@ export function OfficialPostForm({
     post?.post_status ?? "DRAFT",
   );
 
+  // マッチング用タグ（案件オススメの一致キー）
+  const [tags, setTags] = useState<string[]>([]);
+  const [tagInput, setTagInput] = useState("");
+  const [tagSuggestions, setTagSuggestions] = useState<PostTag[]>([]);
+
+  useEffect(() => {
+    (async () => {
+      setTagSuggestions(await fetchActiveTags());
+      if (post?.id) setTags(await fetchPostTagNames(post.id));
+    })();
+  }, [post?.id]);
+
+  const addTag = (value: string) => {
+    const v = value.trim();
+    if (!v || tags.includes(v)) return;
+    setTags((prev) => [...prev, v]);
+    setTagInput("");
+  };
+  const removeTag = (value: string) =>
+    setTags((prev) => prev.filter((t) => t !== value));
+
   // 社内イベントカレンダー連携（admin 以上のみ操作可能なフォーム）。
   // 現状はプロトタイプUI段階で、イベント側の保存処理は未接続。
   const [linkToCalendar, setLinkToCalendar] = useState(false);
@@ -74,7 +101,9 @@ export function OfficialPostForm({
     // カレンダー連携を有効にした場合は開催開始日時が必須。
     // ※イベント側の保存処理はプロトタイプ段階で未接続のため、ここでは入力検証のみ行う。
     if (linkToCalendar && !eventStartAt) {
-      setError("カレンダー連携を有効にする場合は開催開始日時を入力してください。");
+      setError(
+        "カレンダー連携を有効にする場合は開催開始日時を入力してください。",
+      );
       return;
     }
 
@@ -115,18 +144,32 @@ export function OfficialPostForm({
 
     const result =
       isEdit && post
-        ? await supabase.from("posts").update(payload).eq("id", post.id)
-        : await supabase.from("posts").insert({
-            ...payload,
-            created_by_user_id: user.id,
-          });
-
-    setIsLoading(false);
+        ? await supabase
+            .from("posts")
+            .update(payload)
+            .eq("id", post.id)
+            .select("id")
+            .single()
+        : await supabase
+            .from("posts")
+            .insert({
+              ...payload,
+              created_by_user_id: user.id,
+            })
+            .select("id")
+            .single();
 
     if (result.error) {
+      setIsLoading(false);
       setError(result.error.message);
       return;
     }
+
+    // マッチング用タグを洗い替え（030 未適用なら RLS で弾かれるが案件保存は成功済み）
+    const savedId = (result.data as { id: string } | null)?.id ?? post?.id;
+    if (savedId) await syncPostTags(savedId, tags);
+
+    setIsLoading(false);
 
     router.push(cancelPath);
     router.refresh();
@@ -304,6 +347,59 @@ export function OfficialPostForm({
                 size="lg"
                 classNames={formInputClasses}
               />
+            </FormField>
+
+            <FormField label="タグ（任意）">
+              <div className="space-y-2">
+                {tags.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {tags.map((t) => (
+                      <Chip
+                        key={t}
+                        color="primary"
+                        variant="flat"
+                        onClose={() => removeTag(t)}
+                      >
+                        {t}
+                      </Chip>
+                    ))}
+                  </div>
+                )}
+                <Input
+                  value={tagInput}
+                  onValueChange={setTagInput}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      addTag(tagInput);
+                    }
+                  }}
+                  placeholder="スキル名を入力して Enter（例: Figma, Python）"
+                  variant="bordered"
+                  size="lg"
+                  classNames={formInputClasses}
+                />
+                <p className="text-[11px] text-slate-400">
+                  付けたタグが応募者のスキルと一致すると「あなたへのオススメ」に表示されます。
+                </p>
+                {tagSuggestions.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {tagSuggestions
+                      .filter((s) => !tags.includes(s.name))
+                      .slice(0, 12)
+                      .map((s) => (
+                        <button
+                          key={s.id}
+                          type="button"
+                          onClick={() => addTag(s.name)}
+                          className="rounded border border-slate-300 px-2 py-0.5 text-[11px] text-slate-600 transition-colors hover:border-blue-500 hover:bg-blue-50"
+                        >
+                          {s.name}
+                        </button>
+                      ))}
+                  </div>
+                )}
+              </div>
             </FormField>
 
             {/* 社内イベントカレンダー連携（admin 以上のみ） */}
