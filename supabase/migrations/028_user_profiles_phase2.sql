@@ -39,3 +39,55 @@ create policy "user_profiles: select same company" on public.user_profiles
         and cm.company_id = any(public.get_user_company_ids())
     )
   );
+
+-- ============================================================
+-- 3. 社員検索ディレクトリ RPC（026/027 と同じ安全方針・SECURITY DEFINER）
+--    public.users の RLS は本人 + ADMIN のみのため、同僚の氏名/アバターを
+--    直接 join できない。自社の在籍メンバーに限り、検索表示に必要な最小列だけ返す。
+--    target を渡すと該当1名のみ（社員プロフィール詳細用）。
+-- ============================================================
+create or replace function public.people_directory(target uuid default null)
+returns table (
+  user_id         uuid,
+  display_name    text,
+  avatar_url      text,
+  department_name text,
+  job_title       text,
+  bio             text,
+  skills          text[],
+  special_skills  text[],
+  hobbies         text[],
+  interest_themes text,
+  consult_topics  text,
+  availability    text
+)
+language sql
+security definer
+set search_path = public
+as $$
+  select
+    u.id,
+    u.display_name,
+    u.avatar_url,
+    d.name,
+    cm.job_title,
+    p.bio,
+    p.skills,
+    p.special_skills,
+    p.hobbies,
+    p.interest_themes,
+    p.consult_topics,
+    p.availability
+  from public.company_members cm
+  join public.users u on u.id = cm.user_id
+  left join public.departments d on d.id = cm.department_id
+  left join public.user_profiles p on p.user_id = cm.user_id
+  where cm.company_id = any(public.get_user_company_ids())
+    and cm.status = 'active'
+    and u.deleted_at is null
+    and (target is null or u.id = target)
+  order by u.display_name;
+$$;
+
+grant execute on function public.people_directory(uuid) to authenticated;
+grant execute on function public.people_directory(uuid) to service_role;
