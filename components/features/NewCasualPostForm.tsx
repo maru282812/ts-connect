@@ -1,6 +1,6 @@
 "use client";
 
-import { Input, Select, SelectItem } from "@heroui/react";
+import { Input, Select, SelectItem, Switch } from "@heroui/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
@@ -14,6 +14,10 @@ import { FormField } from "@/components/ui/FormField";
 import { CASUAL_POST_STATUSES, isPublicStatus } from "@/lib/postStatus";
 import { createClient } from "@/lib/supabase/client";
 import type { Company, PostStatus } from "@/types/database";
+
+// 社内イベントカレンダー連携は第1弾リリースでは非表示（memory/release_scope_phase1.md）。
+// 次フェーズで true に戻すと入力UI・検証が復活する。
+const ENABLE_CALENDAR_LINK = false;
 
 export interface CasualPostDefaultValues {
   id: string;
@@ -58,6 +62,14 @@ export function NewCasualPostForm({
     defaultValues?.postStatus ?? "OPEN",
   );
   const [deadline, setDeadline] = useState(defaultValues?.deadline ?? "");
+
+  // 社内イベントカレンダー連携（admin 以上のみ）。
+  // 現状はプロトタイプUI段階で、イベント側の保存処理は未接続。
+  const [linkToCalendar, setLinkToCalendar] = useState(false);
+  const [eventStartAt, setEventStartAt] = useState("");
+  const [eventEndAt, setEventEndAt] = useState("");
+  const [eventVenue, setEventVenue] = useState("");
+
   const [companies, setCompanies] = useState<Company[]>([]);
   const [companyId, setCompanyId] = useState(defaultValues?.companyId ?? "");
   const [isLoading, setIsLoading] = useState(false);
@@ -122,6 +134,14 @@ export function NewCasualPostForm({
       return;
     }
 
+    // カレンダー連携（admin 以上）を有効にした場合は開催開始日時が必須。
+    // ※イベント側の保存処理はプロトタイプ段階で未接続のため、ここでは入力検証のみ行う。
+    if (ENABLE_CALENDAR_LINK && mode === "admin" && linkToCalendar && !eventStartAt) {
+      setError("カレンダー連携を有効にする場合は開催開始日時を入力してください。");
+      setIsLoading(false);
+      return;
+    }
+
     let resolvedCompanyId = companyId;
     if (mode === "user" || !resolvedCompanyId) {
       const { data: memberData } = await supabase
@@ -152,8 +172,9 @@ export function NewCasualPostForm({
           company_id: resolvedCompanyId,
           thumbnail_url: thumbnailUrl || null,
           deadline_at: deadline ? new Date(deadline).toISOString() : null,
-          published_at:
-            isPublicStatus(resolvedStatus) ? new Date().toISOString() : null,
+          published_at: isPublicStatus(resolvedStatus)
+            ? new Date().toISOString()
+            : null,
           updated_at: new Date().toISOString(),
         })
         .eq("id", defaultValues.id);
@@ -221,6 +242,8 @@ export function NewCasualPostForm({
       <div className="flex items-center gap-2 text-sm text-slate-500 mb-6">
         <button
           type="button"
+          data-testid="casual-post-back"
+          aria-label={`${backLabel}へ戻る`}
           onClick={() => router.push(resolvedCancelPath)}
           className="hover:text-slate-700 transition-colors"
         >
@@ -315,27 +338,90 @@ export function NewCasualPostForm({
               </FormField>
             </div>
 
-            {/* 管理者のみ：補足設定（会社選択） */}
-            {mode === "admin" && companies.length > 0 && (
-              <div className="border-t border-slate-100 pt-6">
-                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-5">
+            {/* 管理者のみ：補足設定（会社選択・カレンダー連携） */}
+            {mode === "admin" && (
+              <div className="border-t border-slate-100 pt-6 flex flex-col gap-6">
+                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
                   補足設定
                 </p>
-                <FormField label="所属会社" required>
-                  <Select
-                    selectedKeys={companyId ? [companyId] : []}
-                    onSelectionChange={(keys) =>
-                      setCompanyId(Array.from(keys)[0] as string)
-                    }
-                    isRequired
-                    variant="bordered"
-                    classNames={formSelectClasses}
-                  >
-                    {companies.map((c) => (
-                      <SelectItem key={c.id}>{c.name}</SelectItem>
-                    ))}
-                  </Select>
-                </FormField>
+
+                {companies.length > 0 && (
+                  <FormField label="所属会社" required>
+                    <Select
+                      selectedKeys={companyId ? [companyId] : []}
+                      onSelectionChange={(keys) =>
+                        setCompanyId(Array.from(keys)[0] as string)
+                      }
+                      isRequired
+                      variant="bordered"
+                      classNames={formSelectClasses}
+                    >
+                      {companies.map((c) => (
+                        <SelectItem key={c.id}>{c.name}</SelectItem>
+                      ))}
+                    </Select>
+                  </FormField>
+                )}
+
+                {/* 社内イベントカレンダー連携（admin 以上のみ）。
+                    第1弾リリースでは非表示（ENABLE_CALENDAR_LINK）。 */}
+                {ENABLE_CALENDAR_LINK && (
+                <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 flex flex-col gap-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="text-sm font-bold text-slate-700">
+                        社内イベントカレンダーに連携
+                      </p>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        ONにすると、この投稿をイベントとして社内イベントカレンダーにも掲載します。
+                      </p>
+                    </div>
+                    <Switch
+                      isSelected={linkToCalendar}
+                      onValueChange={setLinkToCalendar}
+                      color="primary"
+                    />
+                  </div>
+
+                  {linkToCalendar && (
+                    <div className="flex flex-col gap-4 border-t border-slate-200 pt-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                        <FormField label="開催開始" required>
+                          <Input
+                            type="datetime-local"
+                            value={eventStartAt}
+                            onValueChange={setEventStartAt}
+                            isRequired
+                            variant="bordered"
+                            size="lg"
+                            classNames={formInputClasses}
+                          />
+                        </FormField>
+                        <FormField label="開催終了（任意）">
+                          <Input
+                            type="datetime-local"
+                            value={eventEndAt}
+                            onValueChange={setEventEndAt}
+                            variant="bordered"
+                            size="lg"
+                            classNames={formInputClasses}
+                          />
+                        </FormField>
+                      </div>
+                      <FormField label="開催場所（任意）">
+                        <Input
+                          value={eventVenue}
+                          onValueChange={setEventVenue}
+                          placeholder="例: 本社 会議室A / オンライン"
+                          variant="bordered"
+                          size="lg"
+                          classNames={formInputClasses}
+                        />
+                      </FormField>
+                    </div>
+                  )}
+                </div>
+                )}
               </div>
             )}
           </div>
@@ -344,6 +430,7 @@ export function NewCasualPostForm({
           <div className="px-8 py-5 bg-slate-50 border-t border-slate-100 flex gap-3 justify-end">
             <AppButton
               type="button"
+              data-testid="casual-post-cancel"
               variantType="secondary"
               onPress={() => router.push(resolvedCancelPath)}
             >
@@ -351,6 +438,7 @@ export function NewCasualPostForm({
             </AppButton>
             <AppButton
               type="submit"
+              data-testid="casual-post-submit"
               isLoading={isLoading}
             >
               {submitLabel}

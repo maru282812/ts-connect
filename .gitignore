@@ -15,3 +15,7 @@ codex-fix-dev.out.log
 docs
 screen-design
 stitch_menu_interface_design_proposal
+
+# --- AI discovery skill chain (local copies from ai-development-skills; not committed) ---
+.agents/skills/
+.claude/skills/

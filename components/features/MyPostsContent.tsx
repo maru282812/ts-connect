@@ -17,7 +17,10 @@ interface MyPostsContentProps {
   successParam?: string;
 }
 
-export function MyPostsContent({ editBasePath, successParam }: MyPostsContentProps) {
+export function MyPostsContent({
+  editBasePath,
+  successParam,
+}: MyPostsContentProps) {
   const router = useRouter();
   const [posts, setPosts] = useState<PostWithRelations[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -74,7 +77,9 @@ export function MyPostsContent({ editBasePath, successParam }: MyPostsContentPro
     <div>
       {successMessage && (
         <div className="mb-4 flex items-center justify-between bg-emerald-50 border border-emerald-200 rounded-lg px-4 py-2.5">
-          <p className="text-sm text-emerald-700 font-medium">✓ {successMessage}</p>
+          <p className="text-sm text-emerald-700 font-medium">
+            ✓ {successMessage}
+          </p>
           <button
             type="button"
             onClick={() => setSuccessMessage(null)}
@@ -183,9 +188,7 @@ export function MyPostsContent({ editBasePath, successParam }: MyPostsContentPro
               editBasePath ? (
                 <button
                   type="button"
-                  onClick={() =>
-                    router.push(`${editBasePath}/${post.id}/edit`)
-                  }
+                  onClick={() => router.push(`${editBasePath}/${post.id}/edit`)}
                   className="flex-1 text-center px-4 rounded-lg text-sm font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors min-h-[44px]"
                 >
                   編集

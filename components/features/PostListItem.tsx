@@ -79,7 +79,11 @@ export function PostListItem({
 
         {/* 報酬・タグ */}
         <div className="flex items-center gap-2 flex-wrap">
-          <Chip size="sm" color={isOfficial ? "primary" : "success"} variant="flat">
+          <Chip
+            size="sm"
+            color={isOfficial ? "primary" : "success"}
+            variant="flat"
+          >
             {isOfficial ? "公式" : "気軽"}
           </Chip>
           {post.post_status === "IN_PROGRESS" && (
@@ -88,7 +92,9 @@ export function PostListItem({
             </Chip>
           )}
           {isOfficial && post.price_text && (
-            <span className="text-sm font-bold text-primary">{post.price_text}</span>
+            <span className="text-sm font-bold text-primary">
+              {post.price_text}
+            </span>
           )}
         </div>
 

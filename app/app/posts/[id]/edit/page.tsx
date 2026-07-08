@@ -60,7 +60,11 @@ export default function EditPostPage() {
         <p className="text-default-500">
           {error ?? "投稿が見つかりませんでした"}
         </p>
-        <Button variant="flat" onPress={() => router.push("/app/my-posts")} className="mt-4">
+        <Button
+          variant="flat"
+          onPress={() => router.push("/app/my-posts")}
+          className="mt-4"
+        >
           投稿一覧に戻る
         </Button>
       </div>

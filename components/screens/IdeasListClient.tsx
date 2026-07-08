@@ -109,6 +109,22 @@ const IDEAS: IdeaItem[] = [
   },
 ];
 
+function SearchIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="h-[18px] w-[18px] text-default-400"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      viewBox="0 0 24 24"
+    >
+      <circle cx="11" cy="11" r="8" />
+      <line x1="21" y1="21" x2="16.65" y2="16.65" />
+    </svg>
+  );
+}
+
 function PlusIcon() {
   return (
     <svg
@@ -125,7 +141,50 @@ function PlusIcon() {
   );
 }
 
-export function IdeasListClient() {
+interface IdeasListClientProps {
+  /** 企画・アイデア詳細のベースパス（例: /app/ideas, /company/ideas-feed） */
+  ideasBasePath?: string;
+  /** 「企画・アイデアを投稿」導線のリンク先 */
+  newHref?: string;
+}
+
+export function IdeasListClient({
+  ideasBasePath = "/app/ideas",
+  newHref = "/app/ideas/new",
+}: IdeasListClientProps = {}) {
+  return (
+    <div className="max-w-[1400px] mx-auto w-full">
+      {/* Page header */}
+      <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 mb-6">
+        <div>
+          <h1 className="text-3xl font-bold text-default-900">
+            企画・アイデア一覧
+          </h1>
+          <p className="text-sm text-default-500 mt-1">
+            社内の企画・アイデアを応援しよう
+          </p>
+        </div>
+        <Link
+          href={newHref}
+          className="inline-flex items-center justify-center gap-2 bg-primary text-white px-6 py-3 rounded-lg text-sm font-bold shadow-sm hover:bg-primary/90 active:scale-95 transition-all whitespace-nowrap"
+        >
+          <PlusIcon />
+          企画・アイデアを投稿
+        </Link>
+      </div>
+
+      <IdeaListView ideasBasePath={ideasBasePath} newHref={newHref} />
+    </div>
+  );
+}
+
+function IdeaListView({
+  ideasBasePath,
+  newHref,
+}: {
+  ideasBasePath: string;
+  newHref: string;
+}) {
   const [tab, setTab] = useState<"ALL" | IdeaStatus>("ALL");
 
   const counts = useMemo(() => {
@@ -142,51 +201,77 @@ export function IdeasListClient() {
   );
 
   return (
-    <div className="max-w-[1400px] mx-auto w-full">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-default-900">
-            企画・アイデア
-          </h1>
-          <p className="text-sm text-default-500 mt-1">
-            社内の企画・アイデアを応援しよう
-          </p>
+    <>
+      {/* Filter card */}
+      <div className="bg-white rounded-xl p-5 border border-default-200 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="md:col-span-2">
+            <span className="block text-xs font-bold text-default-600 mb-1.5">
+              キーワード検索
+            </span>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2">
+                <SearchIcon />
+              </span>
+              <input
+                className="w-full bg-default-50 border border-default-200 rounded-lg pl-10 pr-4 py-2 text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+                placeholder="例: 経費精算, 福利厚生..."
+                type="text"
+              />
+            </div>
+          </div>
+          <div>
+            <span className="block text-xs font-bold text-default-600 mb-1.5">
+              タグ
+            </span>
+            <select className="w-full bg-default-50 border border-default-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary outline-none">
+              <option>すべてのタグ</option>
+              <option>#DX</option>
+              <option>#福利厚生</option>
+              <option>#業務効率化</option>
+              <option>#自動化</option>
+            </select>
+          </div>
+          <div>
+            <span className="block text-xs font-bold text-default-600 mb-1.5">
+              状態
+            </span>
+            <select className="w-full bg-default-50 border border-default-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary outline-none">
+              <option>すべての状態</option>
+              <option>提案中</option>
+              <option>検討中</option>
+              <option>採用</option>
+              <option>実施中</option>
+              <option>完了</option>
+            </select>
+          </div>
         </div>
-        <Link
-          href="/app/ideas/new"
-          className="inline-flex items-center justify-center gap-2 bg-primary text-white px-5 py-2.5 rounded-lg text-sm font-bold shadow-sm hover:bg-primary/90 active:scale-95 transition-all"
-        >
-          <PlusIcon />
-          企画・アイデアを投稿
-        </Link>
-      </div>
-
-      {/* Filter bar */}
-      <div className="bg-white rounded-xl p-4 border border-default-200 mb-6 flex flex-wrap items-center gap-3">
-        <input
-          className="flex-1 min-w-[200px] bg-default-50 border border-default-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary outline-none"
-          placeholder="キーワード検索..."
-          type="text"
-        />
-        <select className="bg-default-50 border border-default-200 rounded-lg px-3 py-2 text-sm">
-          <option>すべてのタグ</option>
-          <option>#DX</option>
-          <option>#福利厚生</option>
-        </select>
-        <label className="flex items-center gap-2 text-sm text-default-600">
-          <input
-            className="w-4 h-4 rounded border-default-300 text-primary focus:ring-primary"
-            type="checkbox"
-          />
-          報酬ありのみ
-        </label>
-        <label className="flex items-center gap-2 text-sm text-default-600">
-          <input
-            className="w-4 h-4 rounded border-default-300 text-primary focus:ring-primary"
-            type="checkbox"
-          />
-          困りごと紐づきあり
-        </label>
+        <div className="flex flex-wrap items-center gap-4 mt-4 pt-4 border-t border-default-200">
+          <label className="flex items-center gap-2 cursor-pointer text-sm text-default-600">
+            <input
+              className="w-4 h-4 rounded border-default-300 text-primary focus:ring-primary"
+              type="checkbox"
+            />
+            報酬ありのみ表示
+          </label>
+          <label className="flex items-center gap-2 cursor-pointer text-sm text-default-600">
+            <input
+              className="w-4 h-4 rounded border-default-300 text-primary focus:ring-primary"
+              type="checkbox"
+            />
+            困りごと紐づきあり
+          </label>
+          <div className="flex flex-wrap gap-2">
+            {["#DX", "#福利厚生", "#業務効率化"].map((t) => (
+              <span
+                key={t}
+                className="px-3 py-1 bg-default-100 text-default-600 text-xs rounded-full cursor-pointer hover:bg-primary-50 hover:text-primary"
+              >
+                {t}
+              </span>
+            ))}
+          </div>
+        </div>
       </div>
 
       {/* Tabs */}
@@ -210,43 +295,37 @@ export function IdeasListClient() {
         })}
       </div>
 
-      {visible.length === 0 ? (
-        <div className="text-center py-16 text-default-400">
-          <p className="text-sm">該当する企画・アイデアはありません</p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-5">
-          {visible.map((item) => {
-            const meta = STATUS_META[item.status];
-            return (
-              <Link
-                key={item.id}
-                href={`/app/ideas/${item.id}`}
-                className="bg-white border border-default-200 rounded-xl p-5 flex flex-col hover:shadow-md transition-shadow"
-              >
+      {/* Cards grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-5">
+        {visible.map((item) => {
+          const meta = STATUS_META[item.status];
+          return (
+            <Link
+              key={item.id}
+              href={`${ideasBasePath}/${item.id}`}
+              className="bg-white border border-default-200 rounded-xl overflow-hidden flex flex-col hover:shadow-md transition-shadow"
+            >
+              <div className="p-5 flex-1">
                 <div className="flex justify-between items-start mb-3">
                   <span
                     className={`px-2 py-0.5 text-xs rounded font-bold ${meta.badge}`}
                   >
                     {meta.label}
                   </span>
-                  <div className="flex gap-3 text-xs text-default-500">
-                    <span>❤ {item.likes}</span>
-                    <span>🔖 {item.bookmarks}</span>
-                  </div>
+                  <span className="text-xs text-default-500">
+                    予算: {item.budget}
+                  </span>
                 </div>
                 <h3 className="text-base font-semibold text-default-900 mb-2 line-clamp-2">
                   {item.title}
                 </h3>
-                <p className="text-sm text-default-600 mb-3 line-clamp-3 flex-1">
+                <p className="text-sm text-default-600 mb-4 line-clamp-3">
                   {item.summary}
                 </p>
-                {item.linkedIssue && (
-                  <p className="text-xs text-default-500 mb-3 line-clamp-1">
-                    🔗 困りごと: {item.linkedIssue}
-                  </p>
-                )}
-                <div className="flex flex-wrap gap-2 mb-3">
+                <div className="flex flex-wrap gap-2 mb-4">
+                  <span className="px-2 py-0.5 bg-default-100 text-default-600 text-xs rounded">
+                    提案: {item.author}
+                  </span>
                   {item.tags.map((t) => (
                     <span
                       key={t}
@@ -256,15 +335,57 @@ export function IdeasListClient() {
                     </span>
                   ))}
                 </div>
-                <div className="flex items-center justify-between pt-3 border-t border-default-200 text-xs text-default-500">
-                  <span>提案: {item.author}</span>
-                  <span>予算: {item.budget}</span>
+                {item.linkedIssue && (
+                  <p className="text-xs text-default-500 mb-4 line-clamp-1">
+                    🔗 困りごと: {item.linkedIssue}
+                  </p>
+                )}
+                {item.reward ? (
+                  <div className="p-3 bg-amber-50 rounded-lg">
+                    <p className="text-xs text-amber-700 font-bold">報酬条件</p>
+                    <p className="text-sm font-bold text-default-800">
+                      {item.reward}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="p-3 bg-default-100 rounded-lg">
+                    <p className="text-xs text-default-500 font-bold">
+                      報酬条件
+                    </p>
+                    <p className="text-sm font-bold text-default-700">
+                      報酬なし
+                    </p>
+                  </div>
+                )}
+              </div>
+              <div className="px-5 py-3 bg-default-50 border-t border-default-200 flex items-center justify-between">
+                <div className="flex gap-4 text-xs text-default-500">
+                  <span>❤ {item.likes}</span>
                 </div>
-              </Link>
-            );
-          })}
-        </div>
-      )}
-    </div>
+                <span className="text-primary text-sm font-bold">
+                  詳細を見る →
+                </span>
+              </div>
+            </Link>
+          );
+        })}
+
+        {/* 企画・アイデアを投稿する */}
+        <Link
+          href={newHref}
+          className="border-2 border-dashed border-default-300 rounded-xl flex flex-col items-center justify-center text-center p-8 min-h-[260px] hover:border-primary hover:bg-primary-50/40 transition-colors group"
+        >
+          <span className="w-12 h-12 rounded-full bg-default-100 group-hover:bg-primary-100 flex items-center justify-center mb-4 text-default-500 group-hover:text-primary">
+            <PlusIcon />
+          </span>
+          <span className="text-base font-bold text-default-800">
+            企画・アイデアを投稿する
+          </span>
+          <span className="text-sm text-default-500 mt-1">
+            あなたの企画・アイデアを全社へ提案できます
+          </span>
+        </Link>
+      </div>
+    </>
   );
 }

@@ -11,7 +11,8 @@
       "Bash(awk '/create table if not exists public.post_tags /,/\\\\\\);/' supabase/001_schema.sql)",
       "Bash(awk '/create table if not exists public.post_tag_relations /,/\\\\\\);/' supabase/001_schema.sql)",
       "Bash(awk '/create table if not exists public.post_reports /,/\\\\\\);/' supabase/001_schema.sql)",
-      "Bash(awk '/create table if not exists public.departments /,/\\\\\\);/' supabase/001_schema.sql)"
+      "Bash(awk '/create table if not exists public.departments /,/\\\\\\);/' supabase/001_schema.sql)",
+      "Bash(grep -nA12 \"community_post_tags\" supabase/002_seed_dev.sql)"
     ]
   }
 }

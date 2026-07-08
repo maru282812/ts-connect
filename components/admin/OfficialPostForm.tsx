@@ -1,6 +1,6 @@
 "use client";
 
-import { Input, Select, SelectItem } from "@heroui/react";
+import { Input, Select, SelectItem, Switch } from "@heroui/react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import {
@@ -52,6 +52,14 @@ export function OfficialPostForm({
   const [postStatus, setPostStatus] = useState<PostStatus>(
     post?.post_status ?? "DRAFT",
   );
+
+  // 社内イベントカレンダー連携（admin 以上のみ操作可能なフォーム）。
+  // 現状はプロトタイプUI段階で、イベント側の保存処理は未接続。
+  const [linkToCalendar, setLinkToCalendar] = useState(false);
+  const [eventStartAt, setEventStartAt] = useState("");
+  const [eventEndAt, setEventEndAt] = useState("");
+  const [eventVenue, setEventVenue] = useState("");
+
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -60,6 +68,13 @@ export function OfficialPostForm({
 
     if (!requirements.trim()) {
       setError("募集条件は必須項目です");
+      return;
+    }
+
+    // カレンダー連携を有効にした場合は開催開始日時が必須。
+    // ※イベント側の保存処理はプロトタイプ段階で未接続のため、ここでは入力検証のみ行う。
+    if (linkToCalendar && !eventStartAt) {
+      setError("カレンダー連携を有効にする場合は開催開始日時を入力してください。");
       return;
     }
 
@@ -290,6 +305,68 @@ export function OfficialPostForm({
                 classNames={formInputClasses}
               />
             </FormField>
+
+            {/* 社内イベントカレンダー連携（admin 以上のみ） */}
+            <div className="border-t border-slate-100 pt-6 flex flex-col gap-6">
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                補足設定
+              </p>
+              <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 flex flex-col gap-4">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-bold text-slate-700">
+                      社内イベントカレンダーに連携
+                    </p>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      ONにすると、この案件をイベントとして社内イベントカレンダーにも掲載します。
+                    </p>
+                  </div>
+                  <Switch
+                    isSelected={linkToCalendar}
+                    onValueChange={setLinkToCalendar}
+                    color="primary"
+                  />
+                </div>
+
+                {linkToCalendar && (
+                  <div className="flex flex-col gap-4 border-t border-slate-200 pt-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                      <FormField label="開催開始" required>
+                        <Input
+                          type="datetime-local"
+                          value={eventStartAt}
+                          onValueChange={setEventStartAt}
+                          isRequired
+                          variant="bordered"
+                          size="lg"
+                          classNames={formInputClasses}
+                        />
+                      </FormField>
+                      <FormField label="開催終了（任意）">
+                        <Input
+                          type="datetime-local"
+                          value={eventEndAt}
+                          onValueChange={setEventEndAt}
+                          variant="bordered"
+                          size="lg"
+                          classNames={formInputClasses}
+                        />
+                      </FormField>
+                    </div>
+                    <FormField label="開催場所（任意）">
+                      <Input
+                        value={eventVenue}
+                        onValueChange={setEventVenue}
+                        placeholder="例: 本社 会議室A / オンライン"
+                        variant="bordered"
+                        size="lg"
+                        classNames={formInputClasses}
+                      />
+                    </FormField>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
 
           {/* フッターボタン */}

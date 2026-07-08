@@ -54,7 +54,11 @@ export function CasualPostsList({
 
       if (mode === "admin" && user) {
         const [{ data: profile }, { data: memberships }] = await Promise.all([
-          supabase.from("users").select("system_role").eq("id", user.id).single(),
+          supabase
+            .from("users")
+            .select("system_role")
+            .eq("id", user.id)
+            .single(),
           supabase
             .from("company_members")
             .select("company_id")
@@ -80,7 +84,11 @@ export function CasualPostsList({
       }
 
       // adminモードかつMASTER_ADMIN以外は所属会社のみ表示
-      if (mode === "admin" && !currentIsMasterAdmin && currentCompanyIds.length > 0) {
+      if (
+        mode === "admin" &&
+        !currentIsMasterAdmin &&
+        currentCompanyIds.length > 0
+      ) {
         query = query.in("company_id", currentCompanyIds);
       }
 
@@ -201,56 +209,56 @@ export function CasualPostsList({
                 const canEdit =
                   isMasterAdmin || post.created_by_user_id === currentUserId;
                 return (
-                <tr
-                  key={post.id}
-                  className="border-b last:border-0 hover:bg-slate-50 transition-colors border-slate-100"
-                >
-                  <td className="px-4 py-3">
-                    <span className="font-medium text-default-800 line-clamp-2 max-w-xs">
-                      {post.title}
-                    </span>
-                    <p className="text-xs text-default-400 mt-0.5">
-                      {post.companies?.name ?? "未設定"}
-                    </p>
-                  </td>
-                  <td className="px-4 py-3 text-xs text-default-500">
-                    {post.users?.display_name ?? "匿名"}
-                  </td>
-                  <td className="px-4 py-3 text-xs text-default-400">
-                    {new Date(post.created_at).toLocaleDateString("ja-JP")}
-                  </td>
-                  <td className="px-4 py-3">
-                    <PostStatusBadge status={post.post_status} />
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-3">
-                      <Link
-                        href={`${resolvedDetailPath}/${post.id}`}
-                        className="text-xs text-primary hover:underline"
-                      >
-                        詳細
-                      </Link>
-                      {canEdit ? (
-                        <>
-                          <span className="text-slate-200">|</span>
-                      <Link
-                        href={`/company/posts/${post.id}/edit`}
-                        className="text-xs text-blue-600 hover:underline"
-                      >
-                        編集
+                  <tr
+                    key={post.id}
+                    className="border-b last:border-0 hover:bg-slate-50 transition-colors border-slate-100"
+                  >
+                    <td className="px-4 py-3">
+                      <span className="font-medium text-default-800 line-clamp-2 max-w-xs">
+                        {post.title}
+                      </span>
+                      <p className="text-xs text-default-400 mt-0.5">
+                        {post.companies?.name ?? "未設定"}
+                      </p>
+                    </td>
+                    <td className="px-4 py-3 text-xs text-default-500">
+                      {post.users?.display_name ?? "匿名"}
+                    </td>
+                    <td className="px-4 py-3 text-xs text-default-400">
+                      {new Date(post.created_at).toLocaleDateString("ja-JP")}
+                    </td>
+                    <td className="px-4 py-3">
+                      <PostStatusBadge status={post.post_status} />
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-3">
+                        <Link
+                          href={`${resolvedDetailPath}/${post.id}`}
+                          className="text-xs text-primary hover:underline"
+                        >
+                          詳細
                         </Link>
-                        </>
-                      ) : (
-                        <>
-                          <span className="text-slate-200">|</span>
-                          <span className="text-xs text-default-300">
-                            閲覧のみ
-                          </span>
-                        </>
-                      )}
-                    </div>
-                  </td>
-                </tr>
+                        {canEdit ? (
+                          <>
+                            <span className="text-slate-200">|</span>
+                            <Link
+                              href={`/company/posts/${post.id}/edit`}
+                              className="text-xs text-blue-600 hover:underline"
+                            >
+                              編集
+                            </Link>
+                          </>
+                        ) : (
+                          <>
+                            <span className="text-slate-200">|</span>
+                            <span className="text-xs text-default-300">
+                              閲覧のみ
+                            </span>
+                          </>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
                 );
               })}
             </tbody>

@@ -146,7 +146,56 @@ function PlusIcon() {
   );
 }
 
-export function IssuesListClient() {
+interface IssuesListClientProps {
+  /** 困りごと詳細のベースパス（例: /app/issues, /company/issues-feed） */
+  issuesBasePath?: string;
+  /** 「企画・アイデアを投稿」導線のリンク先 */
+  ideaNewHref?: string;
+  /** 「あなたの困りごとを相談する」導線のリンク先（U-02r） */
+  consultHref?: string;
+}
+
+export function IssuesListClient({
+  issuesBasePath = "/app/issues",
+  ideaNewHref = "/app/ideas/new",
+  consultHref = "/app/issues/consult",
+}: IssuesListClientProps = {}) {
+  return (
+    <div className="max-w-[1400px] mx-auto w-full">
+      {/* Page header */}
+      <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 mb-6">
+        <div>
+          <h1 className="text-3xl font-bold text-default-900">
+            困りごとリスト
+          </h1>
+          <p className="text-sm text-default-500 mt-1">
+            現場の課題を解決するアイデアを募集中です
+          </p>
+        </div>
+        <Link
+          href={ideaNewHref}
+          className="inline-flex items-center justify-center gap-2 bg-primary text-white px-6 py-3 rounded-lg text-sm font-bold shadow-sm hover:bg-primary/90 active:scale-95 transition-all whitespace-nowrap"
+        >
+          <PlusIcon />
+          企画・アイデアを投稿
+        </Link>
+      </div>
+
+      <IssueListView
+        issuesBasePath={issuesBasePath}
+        consultHref={consultHref}
+      />
+    </div>
+  );
+}
+
+function IssueListView({
+  issuesBasePath,
+  consultHref,
+}: {
+  issuesBasePath: string;
+  consultHref: string;
+}) {
   const [tab, setTab] = useState<"ALL" | IssueStatus>("ALL");
 
   const counts = useMemo(() => {
@@ -163,26 +212,7 @@ export function IssuesListClient() {
   );
 
   return (
-    <div className="max-w-[1400px] mx-auto w-full">
-      {/* Page header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-default-900">
-            困りごとリスト
-          </h1>
-          <p className="text-sm text-default-500 mt-1">
-            現場の課題を解決するアイデアを募集中です
-          </p>
-        </div>
-        <Link
-          href="/app/ideas/new"
-          className="inline-flex items-center justify-center gap-2 bg-primary text-white px-5 py-2.5 rounded-lg text-sm font-bold shadow-sm hover:bg-primary/90 active:scale-95 transition-all"
-        >
-          <PlusIcon />
-          企画・アイデアを投稿
-        </Link>
-      </div>
-
+    <>
       {/* Filter card */}
       <div className="bg-white rounded-xl p-5 border border-default-200 mb-6">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -268,84 +298,92 @@ export function IssuesListClient() {
       </div>
 
       {/* Cards grid */}
-      {visible.length === 0 ? (
-        <div className="text-center py-16 text-default-400">
-          <p className="text-sm">該当する困りごとはありません</p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-5">
-          {visible.map((item) => {
-            const meta = STATUS_META[item.status];
-            return (
-              <Link
-                key={item.id}
-                href={`/app/issues/${item.id}`}
-                className="bg-white border border-default-200 rounded-xl overflow-hidden flex flex-col hover:shadow-md transition-shadow"
-              >
-                <div className="p-5 flex-1">
-                  <div className="flex justify-between items-start mb-3">
-                    <span
-                      className={`px-2 py-0.5 text-xs rounded font-bold ${meta.badge}`}
-                    >
-                      {meta.label}
-                    </span>
-                    <span className="text-xs text-default-500">
-                      期限: {item.deadline}
-                    </span>
-                  </div>
-                  <h3 className="text-base font-semibold text-default-900 mb-2 line-clamp-2">
-                    {item.title}
-                  </h3>
-                  <p className="text-sm text-default-600 mb-4 line-clamp-3">
-                    {item.summary}
-                  </p>
-                  <div className="flex flex-wrap gap-2 mb-4">
-                    <span className="px-2 py-0.5 bg-default-100 text-default-600 text-xs rounded">
-                      {item.department}
-                    </span>
-                    {item.tags.map((t) => (
-                      <span
-                        key={t}
-                        className="px-2 py-0.5 bg-primary-50 text-primary text-xs rounded border border-primary-100"
-                      >
-                        {t}
-                      </span>
-                    ))}
-                  </div>
-                  {item.reward ? (
-                    <div className="p-3 bg-amber-50 rounded-lg">
-                      <p className="text-xs text-amber-700 font-bold">
-                        報酬条件
-                      </p>
-                      <p className="text-sm font-bold text-default-800">
-                        {item.reward}
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="p-3 bg-default-100 rounded-lg">
-                      <p className="text-xs text-default-500 font-bold">
-                        報酬条件
-                      </p>
-                      <p className="text-sm font-bold text-default-700">
-                        報酬なし
-                      </p>
-                    </div>
-                  )}
-                </div>
-                <div className="px-5 py-3 bg-default-50 border-t border-default-200 flex items-center justify-between">
-                  <div className="flex gap-4 text-xs text-default-500">
-                    <span>💡 提案 {item.proposals}</span>
-                    <span>❤ {item.likes}</span>
-                  </div>
-                  <span className="text-primary text-sm font-bold">
-                    詳細を見る →
+      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-5">
+        {visible.map((item) => {
+          const meta = STATUS_META[item.status];
+          return (
+            <Link
+              key={item.id}
+              href={`${issuesBasePath}/${item.id}`}
+              className="bg-white border border-default-200 rounded-xl overflow-hidden flex flex-col hover:shadow-md transition-shadow"
+            >
+              <div className="p-5 flex-1">
+                <div className="flex justify-between items-start mb-3">
+                  <span
+                    className={`px-2 py-0.5 text-xs rounded font-bold ${meta.badge}`}
+                  >
+                    {meta.label}
+                  </span>
+                  <span className="text-xs text-default-500">
+                    期限: {item.deadline}
                   </span>
                 </div>
-              </Link>
-            );
-          })}
-        </div>
-      )}
-    </div>
+                <h3 className="text-base font-semibold text-default-900 mb-2 line-clamp-2">
+                  {item.title}
+                </h3>
+                <p className="text-sm text-default-600 mb-4 line-clamp-3">
+                  {item.summary}
+                </p>
+                <div className="flex flex-wrap gap-2 mb-4">
+                  <span className="px-2 py-0.5 bg-default-100 text-default-600 text-xs rounded">
+                    {item.department}
+                  </span>
+                  {item.tags.map((t) => (
+                    <span
+                      key={t}
+                      className="px-2 py-0.5 bg-primary-50 text-primary text-xs rounded border border-primary-100"
+                    >
+                      {t}
+                    </span>
+                  ))}
+                </div>
+                {item.reward ? (
+                  <div className="p-3 bg-amber-50 rounded-lg">
+                    <p className="text-xs text-amber-700 font-bold">報酬条件</p>
+                    <p className="text-sm font-bold text-default-800">
+                      {item.reward}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="p-3 bg-default-100 rounded-lg">
+                    <p className="text-xs text-default-500 font-bold">
+                      報酬条件
+                    </p>
+                    <p className="text-sm font-bold text-default-700">
+                      報酬なし
+                    </p>
+                  </div>
+                )}
+              </div>
+              <div className="px-5 py-3 bg-default-50 border-t border-default-200 flex items-center justify-between">
+                <div className="flex gap-4 text-xs text-default-500">
+                  <span>💡 提案 {item.proposals}</span>
+                  <span>❤ {item.likes}</span>
+                </div>
+                <span className="text-primary text-sm font-bold">
+                  詳細を見る →
+                </span>
+              </div>
+            </Link>
+          );
+        })}
+
+        {/* あなたの困りごとを相談する（U-02r へ遷移） */}
+        <Link
+          href={consultHref}
+          className="border-2 border-dashed border-default-300 rounded-xl flex flex-col items-center justify-center text-center p-8 min-h-[260px] hover:border-primary hover:bg-primary-50/40 transition-colors group"
+        >
+          <span className="w-12 h-12 rounded-full bg-default-100 group-hover:bg-primary-100 flex items-center justify-center mb-4 text-default-500 group-hover:text-primary">
+            <PlusIcon />
+          </span>
+          <span className="text-base font-bold text-default-800">
+            あなたの困りごとを相談する
+          </span>
+          <span className="text-sm text-default-500 mt-1">
+            管理者にリクエストを送ることができます
+          </span>
+        </Link>
+      </div>
+    </>
   );
 }

@@ -1,4 +1,11 @@
-import { Button, Card, CardBody, CardHeader, Chip, Divider } from "@heroui/react";
+import {
+  Button,
+  Card,
+  CardBody,
+  CardHeader,
+  Chip,
+  Divider,
+} from "@heroui/react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { FormField } from "@/components/ui/FormField";
@@ -81,7 +88,6 @@ export default async function ArchivePostDetailPage({
         </CardHeader>
         <Divider />
         <CardBody className="flex flex-col gap-6">
-
           {/* ── 基本情報 ── */}
           <div className="flex flex-col gap-4">
             <SectionHeading>基本情報</SectionHeading>
@@ -123,7 +129,6 @@ export default async function ArchivePostDetailPage({
               <ReadonlyTextarea value={p.body} />
             </FormField>
           </div>
-
         </CardBody>
       </Card>
     </div>

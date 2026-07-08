@@ -3309,14 +3309,18 @@ create policy "conversion_events: MASTER_ADMIN SELECT"
 -- 14. Storage
 -- ============================================================
 
--- thumbnails バケット（公開バケット / 最大 5MB / 画像のみ）
+-- thumbnails バケット（公開バケット / 最大 50MB / 画像・動画）
+-- 社内SNS の画像/動画添付もこのバケットを再利用する（migration 025 で動画対応へ拡張）。
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values (
   'thumbnails',
   'thumbnails',
   true,
-  5242880,
-  array['image/png', 'image/jpeg', 'image/webp', 'image/gif']
+  52428800,
+  array[
+    'image/png', 'image/jpeg', 'image/webp', 'image/gif',
+    'video/mp4', 'video/webm', 'video/quicktime'
+  ]
 )
 on conflict (id) do nothing;
 

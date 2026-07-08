@@ -159,16 +159,16 @@ export const sidebarGroups = [
         href: "/app/events",
         matchHrefs: ["/app/events"],
         icon: "calendar",
-        lifecycle: "planned",
+        lifecycle: "implemented",
         roles: ["USER", "ADMIN", "MASTER_ADMIN"],
       },
       {
         id: "user-bookmarks",
-        label: "ブックマーク",
+        label: "自分の関わり",
         href: "/app/bookmarks",
         matchHrefs: ["/app/bookmarks"],
         icon: "bookmark",
-        lifecycle: "planned",
+        lifecycle: "implemented",
         roles: ["USER", "ADMIN", "MASTER_ADMIN"],
       },
       {
@@ -206,7 +206,7 @@ export const sidebarGroups = [
         href: "/app/people",
         matchHrefs: ["/app/people"],
         icon: "searchPerson",
-        lifecycle: "planned",
+        lifecycle: "implemented",
         roles: ["USER", "ADMIN", "MASTER_ADMIN"],
       },
       {
@@ -215,7 +215,7 @@ export const sidebarGroups = [
         href: "/app/clubs",
         matchHrefs: ["/app/clubs"],
         icon: "club",
-        lifecycle: "planned",
+        lifecycle: "implemented",
         roles: ["USER", "ADMIN", "MASTER_ADMIN"],
       },
     ],
@@ -262,7 +262,7 @@ export const sidebarGroups = [
         href: "/app/goods",
         matchHrefs: ["/app/goods"],
         icon: "goods",
-        lifecycle: "planned",
+        lifecycle: "implemented",
         roles: ["USER", "ADMIN", "MASTER_ADMIN"],
       },
     ],
@@ -309,16 +309,16 @@ export const sidebarGroups = [
         href: "/company/events",
         matchHrefs: ["/company/events"],
         icon: "calendar",
-        lifecycle: "planned",
+        lifecycle: "implemented",
         roles: ["ADMIN", "MASTER_ADMIN"],
       },
       {
         id: "admin-user-bookmarks",
-        label: "ブックマーク",
+        label: "自分の関わり",
         href: "/company/bookmarks",
         matchHrefs: ["/company/bookmarks"],
         icon: "bookmark",
-        lifecycle: "planned",
+        lifecycle: "implemented",
         roles: ["ADMIN", "MASTER_ADMIN"],
       },
       {
@@ -356,7 +356,7 @@ export const sidebarGroups = [
         href: "/company/people",
         matchHrefs: ["/company/people"],
         icon: "searchPerson",
-        lifecycle: "planned",
+        lifecycle: "implemented",
         roles: ["ADMIN", "MASTER_ADMIN"],
       },
       {
@@ -365,7 +365,7 @@ export const sidebarGroups = [
         href: "/company/clubs",
         matchHrefs: ["/company/clubs"],
         icon: "club",
-        lifecycle: "planned",
+        lifecycle: "implemented",
         roles: ["ADMIN", "MASTER_ADMIN"],
       },
     ],
@@ -394,7 +394,7 @@ export const sidebarGroups = [
         href: "/company/issues-feed",
         matchHrefs: ["/company/issues-feed"],
         icon: "help",
-        lifecycle: "planned",
+        lifecycle: "implemented",
         roles: ["ADMIN", "MASTER_ADMIN"],
       },
       {
@@ -412,7 +412,7 @@ export const sidebarGroups = [
         href: "/company/goods-catalog",
         matchHrefs: ["/company/goods-catalog"],
         icon: "goods",
-        lifecycle: "planned",
+        lifecycle: "implemented",
         roles: ["ADMIN", "MASTER_ADMIN"],
       },
     ],
@@ -478,6 +478,15 @@ export const sidebarGroups = [
     defaultOpen: false,
     items: [
       {
+        id: "admin-newsletter",
+        label: "社内報管理",
+        href: "/company/newsletter",
+        matchHrefs: ["/company/newsletter", "/company/newsletter/new"],
+        icon: "article",
+        lifecycle: "implemented",
+        roles: ["ADMIN", "MASTER_ADMIN"],
+      },
+      {
         id: "admin-issues",
         label: "困りごと管理",
         href: "/company/issues",
@@ -492,7 +501,7 @@ export const sidebarGroups = [
         href: "/company/goods",
         matchHrefs: ["/company/goods"],
         icon: "inventory",
-        lifecycle: "planned",
+        lifecycle: "implemented",
         roles: ["ADMIN", "MASTER_ADMIN"],
       },
       {
@@ -501,7 +510,7 @@ export const sidebarGroups = [
         href: "/company/events-admin",
         matchHrefs: ["/company/events-admin"],
         icon: "calendar",
-        lifecycle: "planned",
+        lifecycle: "implemented",
         roles: ["ADMIN", "MASTER_ADMIN"],
       },
       {
@@ -510,7 +519,7 @@ export const sidebarGroups = [
         href: "/company/clubs-admin",
         matchHrefs: ["/company/clubs-admin"],
         icon: "club",
-        lifecycle: "planned",
+        lifecycle: "implemented",
         roles: ["ADMIN", "MASTER_ADMIN"],
       },
     ],
@@ -530,7 +539,7 @@ export const sidebarGroups = [
         href: "/company/ng-words",
         matchHrefs: ["/company/ng-words"],
         icon: "gavel",
-        lifecycle: "planned",
+        lifecycle: "implemented",
         roles: ["ADMIN", "MASTER_ADMIN"],
       },
       {
@@ -539,7 +548,7 @@ export const sidebarGroups = [
         href: "/company/moderation",
         matchHrefs: ["/company/moderation"],
         icon: "report",
-        lifecycle: "planned",
+        lifecycle: "implemented",
         roles: ["ADMIN", "MASTER_ADMIN"],
       },
     ],
@@ -559,7 +568,7 @@ export const sidebarGroups = [
         href: "/company/dashboard",
         matchHrefs: ["/company/dashboard"],
         icon: "dashboard",
-        lifecycle: "planned",
+        lifecycle: "implemented",
         roles: ["ADMIN", "MASTER_ADMIN"],
       },
       {
@@ -568,7 +577,7 @@ export const sidebarGroups = [
         href: "/company/analytics",
         matchHrefs: ["/company/analytics"],
         icon: "analytics",
-        lifecycle: "planned",
+        lifecycle: "implemented",
         roles: ["ADMIN", "MASTER_ADMIN"],
       },
       {
@@ -597,7 +606,7 @@ export const sidebarGroups = [
         href: "/company/master/users",
         matchHrefs: ["/company/master/users"],
         icon: "shield",
-        lifecycle: "planned",
+        lifecycle: "implemented",
         roles: ["MASTER_ADMIN"],
       },
       {
@@ -606,7 +615,7 @@ export const sidebarGroups = [
         href: "/company/master/companies",
         matchHrefs: ["/company/master/companies"],
         icon: "domain",
-        lifecycle: "planned",
+        lifecycle: "implemented",
         roles: ["MASTER_ADMIN"],
       },
       {
@@ -620,16 +629,50 @@ export const sidebarGroups = [
       },
       {
         id: "master-system-settings",
-        label: "システム設定",
+        label: "全社共通マスター設定",
         href: "/company/master/system-settings",
-        matchHrefs: ["/company/master/system-settings"],
+        matchHrefs: [
+          "/company/master/system-settings",
+          "/company/master/system-settings/rewards",
+        ],
         icon: "settings",
-        lifecycle: "planned",
+        lifecycle: "implemented",
         roles: ["MASTER_ADMIN"],
       },
     ],
   },
 ] as const satisfies readonly SidebarGroupSpec[];
+
+/**
+ * 第1弾リリースで「ナビに出す」項目の id。
+ *
+ * 段階リリース用のスイッチ。画面は全部実装済みでも、ここに無い項目はナビから隠す
+ * （結局全部やるので削除はしない / lifecycle はコードの実装状況、こちらはリリース可否で別概念）。
+ * 次フェーズで出すときは、その項目 id をここへ足すだけでよい。
+ * 仕様根拠: memory/release_scope_phase1.md
+ */
+export const CURRENT_RELEASE_ITEM_IDS: ReadonlySet<string> = new Set<string>([
+  // 既存コア（継続表示）
+  "user-posts",
+  "user-casual-new",
+  "user-applications",
+  "user-my-page",
+  "user-my-posts",
+  "admin-user-posts",
+  "admin-user-casual-new",
+  "admin-user-applications",
+  "admin-user-my-page",
+  "admin-user-my-posts",
+  "admin-posts",
+  "admin-applications",
+  "admin-archive",
+  // 社内SNS（いいね・リポスト・コメント・週替わりテーマ）。第1弾リリースはこれが主役。
+  "community-feed",
+  "admin-community-feed",
+  // ② 社員検索 / ③ スキル / ④ おすすめ / ⑤⑥ 社内報 は第1弾では非表示（次フェーズ）。
+  //   社員検索: employee-search / admin-employee-search
+  //   社内報管理: admin-newsletter
+]);
 
 export function getSidebarGroups({
   surface,
@@ -647,6 +690,7 @@ export function getSidebarGroups({
         items: group.items.filter(
           (item) =>
             hasRole(item.roles, role) &&
+            CURRENT_RELEASE_ITEM_IDS.has(item.id) &&
             (showPlanned || item.lifecycle === "implemented"),
         ),
       };

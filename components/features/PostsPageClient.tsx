@@ -13,6 +13,7 @@ import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { PostDetailPane } from "@/components/features/PostDetailPane";
 import { PostListItem } from "@/components/features/PostListItem";
+import { PostsSidebar } from "@/components/features/PostsSidebar";
 import { AppButton } from "@/components/ui/AppButton";
 import { createClient } from "@/lib/supabase/client";
 import type {
@@ -21,13 +22,18 @@ import type {
   PostWithRelations,
 } from "@/types/database";
 
-type TabType = "ALL" | PostType;
+type TabType = "ALL" | PostType | "CLOSED";
 
 const TABS: { key: TabType; label: string }[] = [
   { key: "ALL", label: "すべて" },
   { key: "OFFICIAL", label: "公式案件" },
   { key: "CASUAL", label: "気軽に投稿" },
+  { key: "CLOSED", label: "募集終了" },
 ];
+
+// 右サイドバー(おすすめ/人気困りごと/人気タグ)は第1弾リリースでは非表示
+// （社内SNS関連のみ。memory/release_scope_phase1.md）。次フェーズで true に戻す。
+const SHOW_POSTS_SIDEBAR = false;
 
 interface PostsPageClientProps {
   newPostHref?: string;
@@ -72,8 +78,11 @@ export function PostsPageClient({
   initialTab = "ALL",
 }: PostsPageClientProps) {
   const searchParams = useSearchParams();
-  const { isOpen: isDrawerOpen, onOpen: openDrawer, onClose: closeDrawer } =
-    useDisclosure();
+  const {
+    isOpen: isDrawerOpen,
+    onOpen: openDrawer,
+    onClose: closeDrawer,
+  } = useDisclosure();
 
   const [posts, setPosts] = useState<PostWithRelations[]>([]);
   const [search, setSearch] = useState("");
@@ -106,11 +115,15 @@ export function PostsPageClient({
         .select(
           "*, companies(id, name), users:created_by_user_id(id, display_name, email)",
         )
-        .in("post_status", ["OPEN", "IN_PROGRESS"])
         .order("created_at", { ascending: false });
 
-      if (tab !== "ALL") {
-        query = query.eq("post_type", tab);
+      if (tab === "CLOSED") {
+        query = query.eq("post_status", "CLOSED");
+      } else {
+        query = query.in("post_status", ["OPEN", "IN_PROGRESS"]);
+        if (tab === "OFFICIAL" || tab === "CASUAL") {
+          query = query.eq("post_type", tab);
+        }
       }
       if (search.trim()) {
         query = query.or(
@@ -224,26 +237,63 @@ export function PostsPageClient({
   return (
     <>
       {/* ============================================================
-          コンテナ: デスクトップは固定高さ内スクロール、モバイルは自然スクロール
+          コンテナ: メイン(案件リスト) + 右サイドバー の2カラム
       ============================================================ */}
-      <div className="flex flex-col max-w-[1400px] mx-auto w-full md:h-[calc(100vh-6rem)] md:overflow-hidden">
-
-        {/* ============================================================
+      <div className="max-w-[1400px] mx-auto w-full grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <div
+          className={`${SHOW_POSTS_SIDEBAR ? "lg:col-span-8" : "lg:col-span-12"} flex flex-col min-w-0`}
+        >
+          {/* ============================================================
             検索・フィルターバー
         ============================================================ */}
-        <div className="shrink-0 border-b border-default-200/60 pb-3 mb-2">
-          {/* 1行目: タイトル + 検索 (デスクトップ) / タイトルのみ (モバイル) */}
-          <div className="flex items-center gap-2 mb-2">
-            <div className="shrink-0">
-              <h1 className="text-sm font-bold text-default-800 leading-tight">案件一覧</h1>
-              <p className="text-[11px] text-default-400">
-                {isLoading ? "読み込み中..." : `${posts.length}件`}
-              </p>
+          <div className="shrink-0 border-b border-default-200/60 pb-3 mb-2">
+            {/* 1行目: タイトル + 検索 (デスクトップ) / タイトルのみ (モバイル) */}
+            <div className="flex items-center gap-2 mb-2">
+              <div className="shrink-0">
+                <h1 className="text-sm font-bold text-default-800 leading-tight">
+                  案件一覧
+                </h1>
+                <p className="text-[11px] text-default-400">
+                  {isLoading ? "読み込み中..." : `${posts.length}件`}
+                </p>
+              </div>
+
+              {/* デスクトップ: 区切り + 検索バー */}
+              <div className="w-px h-6 bg-default-200 shrink-0 hidden md:block" />
+              <div className="hidden md:block flex-1 min-w-[140px] max-w-[260px]">
+                <Input
+                  placeholder="キーワード検索..."
+                  value={search}
+                  onValueChange={setSearch}
+                  size="sm"
+                  variant="bordered"
+                  isClearable
+                  onClear={() => setSearch("")}
+                  startContent={<SearchIcon />}
+                  classNames={{
+                    inputWrapper: "bg-white h-8",
+                    input: "text-xs",
+                  }}
+                />
+              </div>
+
+              {/* 新規投稿ボタン: デスクトップのみ右端 */}
+              {newPostHref && (
+                <div className="ml-auto hidden md:block">
+                  <AppButton
+                    as={Link}
+                    href={newPostHref}
+                    className="shrink-0"
+                    startContent={<PlusIcon />}
+                  >
+                    気軽に投稿
+                  </AppButton>
+                </div>
+              )}
             </div>
 
-            {/* デスクトップ: 区切り + 検索バー */}
-            <div className="w-px h-6 bg-default-200 shrink-0 hidden md:block" />
-            <div className="hidden md:block flex-1 min-w-[140px] max-w-[260px]">
+            {/* モバイル: 検索バー (全幅) */}
+            <div className="md:hidden mb-2">
               <Input
                 placeholder="キーワード検索..."
                 value={search}
@@ -253,103 +303,90 @@ export function PostsPageClient({
                 isClearable
                 onClear={() => setSearch("")}
                 startContent={<SearchIcon />}
-                classNames={{ inputWrapper: "bg-white h-8", input: "text-xs" }}
+                classNames={{ inputWrapper: "bg-white h-10", input: "text-sm" }}
               />
             </div>
 
-            {/* 新規投稿ボタン: デスクトップのみ右端 */}
-            {newPostHref && (
-              <div className="ml-auto hidden md:block">
-                <AppButton as={Link} href={newPostHref} className="shrink-0" startContent={<PlusIcon />}>
-                  気軽に投稿
-                </AppButton>
+            {/* タブフィルター: モバイルは横スクロール */}
+            <div className="flex items-center gap-2">
+              <div className="flex gap-2 overflow-x-auto scrollbar-hide flex-1 pb-0.5">
+                {TABS.map((t) => (
+                  <button
+                    type="button"
+                    key={t.key}
+                    onClick={() => handleTabChange(t.key)}
+                    className={`shrink-0 px-3 py-2 rounded-full text-xs font-medium transition-all min-h-[36px] ${
+                      tab === t.key
+                        ? "bg-primary text-white shadow-sm"
+                        : "bg-white border border-default-200 text-default-600 hover:bg-default-50 hover:border-default-300"
+                    }`}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+                {hasActiveFilter && (
+                  <button
+                    type="button"
+                    onClick={handleClearSearch}
+                    className="shrink-0 px-3 py-2 rounded-full text-xs font-medium transition-all min-h-[36px] bg-white border border-default-200 text-default-500 hover:bg-default-50"
+                  >
+                    クリア
+                  </button>
+                )}
               </div>
-            )}
+            </div>
           </div>
 
-          {/* モバイル: 検索バー (全幅) */}
-          <div className="md:hidden mb-2">
-            <Input
-              placeholder="キーワード検索..."
-              value={search}
-              onValueChange={setSearch}
-              size="sm"
-              variant="bordered"
-              isClearable
-              onClear={() => setSearch("")}
-              startContent={<SearchIcon />}
-              classNames={{ inputWrapper: "bg-white h-10", input: "text-sm" }}
-            />
-          </div>
-
-          {/* タブフィルター: モバイルは横スクロール */}
-          <div className="flex items-center gap-2">
-            <div className="flex gap-2 overflow-x-auto scrollbar-hide flex-1 pb-0.5">
-              {TABS.map((t) => (
-                <button
-                  type="button"
-                  key={t.key}
-                  onClick={() => handleTabChange(t.key)}
-                  className={`shrink-0 px-3 py-2 rounded-full text-xs font-medium transition-all min-h-[36px] ${
-                    tab === t.key
-                      ? "bg-primary text-white shadow-sm"
-                      : "bg-white border border-default-200 text-default-600 hover:bg-default-50 hover:border-default-300"
-                  }`}
-                >
-                  {t.label}
-                </button>
-              ))}
-              {hasActiveFilter && (
-                <button
-                  type="button"
-                  onClick={handleClearSearch}
-                  className="shrink-0 px-3 py-2 rounded-full text-xs font-medium transition-all min-h-[36px] bg-white border border-default-200 text-default-500 hover:bg-default-50"
-                >
-                  クリア
-                </button>
+          {/* ============================================================
+            案件グリッド: デスクトップは内部スクロール、モバイルは自然スクロール
+        ============================================================ */}
+          <div className="md:flex-1 md:overflow-y-auto pt-2">
+            <div className="pb-24 md:pb-6">
+              {isLoading ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {["sk-a", "sk-b", "sk-c", "sk-d", "sk-e", "sk-f"].map(
+                    (key) => (
+                      <div
+                        key={key}
+                        className="bg-white rounded-xl animate-pulse border border-default-100"
+                        style={{ height: "220px" }}
+                      />
+                    ),
+                  )}
+                </div>
+              ) : posts.length === 0 ? (
+                <div className="text-center py-16 text-default-400">
+                  <div className="text-4xl mb-3 select-none">🔍</div>
+                  <p className="text-sm">案件が見つかりませんでした</p>
+                  {search && (
+                    <p className="text-xs mt-1">
+                      キーワードを変えてみてください
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {posts.map((post) => (
+                    <PostListItem
+                      key={post.id}
+                      post={post}
+                      isSelected={post.id === selectedPostId}
+                      onClick={() => handleSelectPost(post)}
+                      appliedTypes={applicationsByPostId.get(post.id)}
+                    />
+                  ))}
+                </div>
               )}
             </div>
           </div>
         </div>
 
-        {/* ============================================================
-            案件グリッド: デスクトップは内部スクロール、モバイルは自然スクロール
-        ============================================================ */}
-        <div className="md:flex-1 md:overflow-y-auto pt-2">
-          <div className="pb-24 md:pb-6">
-            {isLoading ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {["sk-a", "sk-b", "sk-c", "sk-d", "sk-e", "sk-f"].map((key) => (
-                  <div
-                    key={key}
-                    className="bg-white rounded-xl animate-pulse border border-default-100"
-                    style={{ height: "220px" }}
-                  />
-                ))}
-              </div>
-            ) : posts.length === 0 ? (
-              <div className="text-center py-16 text-default-400">
-                <div className="text-4xl mb-3 select-none">🔍</div>
-                <p className="text-sm">案件が見つかりませんでした</p>
-                {search && (
-                  <p className="text-xs mt-1">キーワードを変えてみてください</p>
-                )}
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {posts.map((post) => (
-                  <PostListItem
-                    key={post.id}
-                    post={post}
-                    isSelected={post.id === selectedPostId}
-                    onClick={() => handleSelectPost(post)}
-                    appliedTypes={applicationsByPostId.get(post.id)}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
+        {/* 右サイドバー: おすすめ / 人気困りごと / 人気タグ（第1弾は非表示） */}
+        {SHOW_POSTS_SIDEBAR && (
+          <aside className="lg:col-span-4 hidden lg:block">
+            <PostsSidebar />
+          </aside>
+        )}
       </div>
 
       {/* ============================================================
@@ -384,7 +421,9 @@ export function PostsPageClient({
           {() => (
             <>
               <DrawerHeader className="flex items-center border-b border-default-100 pb-3 pr-14">
-                <span className="text-base font-bold text-default-900">案件詳細</span>
+                <span className="text-base font-bold text-default-900">
+                  案件詳細
+                </span>
               </DrawerHeader>
               <DrawerBody className="p-0">
                 {selectedPost ? (

@@ -23,6 +23,7 @@ export interface User {
   email: string;
   display_name: string;
   notification_email: string | null;
+  avatar_url: string | null;
   system_role: SystemRole;
   account_status: AccountStatus;
   created_at: string;
@@ -124,6 +125,59 @@ export interface ApplicationFormData {
   post_id: string;
   message: string;
   application_type: ApplicationType;
+}
+
+// ============================================================
+// 社内SNS（コミュニティ）— 020/021 migration 対応
+// ============================================================
+export type CommunityVisibility =
+  | "COMPANY"
+  | "DEPARTMENT"
+  | "GROUP"
+  | "ADMIN_ONLY"
+  | "PRIVATE";
+export type CommunityPostKind = "ORIGINAL" | "REPOST" | "QUOTE";
+
+export interface CommunityPost {
+  id: string;
+  company_id: string;
+  author_user_id: string;
+  body: string;
+  visibility: CommunityVisibility;
+  department_id: string | null;
+  post_kind: CommunityPostKind;
+  repost_of_id: string | null;
+  source_kind: "INTERNAL" | "EXTERNAL_IMPORT";
+  source_url: string | null;
+  is_draft: boolean;
+  is_hidden: boolean;
+  like_count: number;
+  comment_count: number;
+  repost_count: number;
+  weekly_theme_id: string | null;
+  edited_at: string | null;
+  deleted_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// フィード取得時の join（author = users(id, display_name)）
+export interface CommunityPostRow extends CommunityPost {
+  author: { id: string; display_name: string } | null;
+}
+
+export interface CommunityWeeklyTheme {
+  id: string;
+  company_id: string | null;
+  title: string;
+  description: string | null;
+  starts_on: string;
+  ends_on: string;
+  is_active: boolean;
+  sort_order: number;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 // ============================================================

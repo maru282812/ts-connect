@@ -61,9 +61,6 @@ export default async function EditPostPage({ params }: EditPostPageProps) {
   }
 
   return (
-    <OfficialPostForm
-      post={p}
-      companies={(companies as Company[]) ?? []}
-    />
+    <OfficialPostForm post={p} companies={(companies as Company[]) ?? []} />
   );
 }

@@ -7,7 +7,8 @@ import { createClient } from "@/lib/supabase/server";
 
 export default async function AdminPostsPage() {
   const supabase = await createClient();
-  const { userId, isMasterAdmin, companyId, companyIds } = await getAdminContext();
+  const { userId, isMasterAdmin, companyId, companyIds } =
+    await getAdminContext();
 
   // ADMIN が会社に所属していない場合は設定不備として早期リターン
   if (!isMasterAdmin && !companyId) {
@@ -16,8 +17,10 @@ export default async function AdminPostsPage() {
         <p className="font-semibold mb-1">会社への所属が設定されていません</p>
         <p>
           このアカウントはまだどの会社にも所属していないため、投稿を表示できません。
-          Supabase 管理画面から <code className="bg-warning-100 px-1 rounded">company_members</code> テーブルに
-          このユーザーのレコードを追加してください（role: ADMIN / status: active）。
+          Supabase 管理画面から{" "}
+          <code className="bg-warning-100 px-1 rounded">company_members</code>{" "}
+          テーブルに このユーザーのレコードを追加してください（role: ADMIN /
+          status: active）。
         </p>
       </div>
     );

@@ -1,5 +1,10 @@
-import { IdeasAdminClient } from "@/components/screens/IdeasAdminClient";
+import { IdeasListClient } from "@/components/screens/IdeasListClient";
 
 export default function CompanyIdeasFeedPage() {
-  return <IdeasAdminClient />;
+  return (
+    <IdeasListClient
+      ideasBasePath="/company/ideas-feed"
+      newHref="/company/ideas-feed/new"
+    />
+  );
 }

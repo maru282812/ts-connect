@@ -86,6 +86,45 @@ declare
   p_var7 uuid := 'cc000107-0000-0000-0000-000000000000';
   p_var8 uuid := 'cc000108-0000-0000-0000-000000000000';
 
+  -- ===== 社内SNS: community_posts UUID =====
+  cp1  uuid := '6c000001-0000-0000-0000-000000000000'; -- co1 ORIGINAL  usr1（週替わりテーマ:ショートカット）
+  cp2  uuid := '6c000002-0000-0000-0000-000000000000'; -- co1 ORIGINAL  adm1（お知らせ）
+  cp3  uuid := '6c000003-0000-0000-0000-000000000000'; -- co1 ORIGINAL  usr1（タグ付き）
+  cp4  uuid := '6c000004-0000-0000-0000-000000000000'; -- co1 QUOTE     adm1（cp1を引用）
+  cp5  uuid := '6c000005-0000-0000-0000-000000000000'; -- co1 REPOST    usr1（cp2をリポスト）
+  cp6  uuid := '6c000006-0000-0000-0000-000000000000'; -- co1 ORIGINAL  adm1（社外SNS取込: EXTERNAL_IMPORT）
+  cp7  uuid := '6c000007-0000-0000-0000-000000000000'; -- co1 ORIGINAL  usr1（PRIVATE: 本人のみ）
+  cp8  uuid := '6c000008-0000-0000-0000-000000000000'; -- co1 ORIGINAL  usr1（会社別テーマ:社内ランチ）
+  cp11 uuid := '6c000011-0000-0000-0000-000000000000'; -- co2 ORIGINAL  usr2（週替わりテーマ:ショートカット）
+  cp12 uuid := '6c000012-0000-0000-0000-000000000000'; -- co2 ORIGINAL  adm2（お知らせ）
+  cp13 uuid := '6c000013-0000-0000-0000-000000000000'; -- co2 REPOST    usr2（cp12をリポスト）
+
+  -- ===== 社内SNS: community_post_tags UUID =====
+  tag1 uuid := '6f000001-0000-0000-0000-000000000000'; -- 業務効率化
+  tag2 uuid := '6f000002-0000-0000-0000-000000000000'; -- ツール
+  tag3 uuid := '6f000003-0000-0000-0000-000000000000'; -- 雑談
+  tag4 uuid := '6f000004-0000-0000-0000-000000000000'; -- お知らせ
+
+  -- ===== 社内SNS: community_post_comments UUID =====
+  cm1 uuid := '6e000001-0000-0000-0000-000000000000'; -- cp1 へ adm1
+  cm2 uuid := '6e000002-0000-0000-0000-000000000000'; -- cp1 へ usr1（本人）
+  cm3 uuid := '6e000003-0000-0000-0000-000000000000'; -- cm1 への返信 usr1
+  cm4 uuid := '6e000004-0000-0000-0000-000000000000'; -- cp3 へ adm1
+  cm5 uuid := '6e000005-0000-0000-0000-000000000000'; -- cp11 へ adm2
+
+  -- ===== 社内SNS: 会社別 週替わりテーマ UUID =====
+  wt_co1 uuid := '72000001-0000-0000-0000-000000000000'; -- co1 限定テーマ
+
+  -- ===== 社内SNS: community_external_drafts UUID =====
+  ed1 uuid := '71000001-0000-0000-0000-000000000000'; -- PUBLISHED（cp6 として公開済）
+  ed2 uuid := '71000002-0000-0000-0000-000000000000'; -- DRAFT（未公開・下書き）
+
+  -- ===== 社内SNS: community_post_reports UUID =====
+  rp1 uuid := '70000001-0000-0000-0000-000000000000'; -- cp6 を usr1 が通報（PENDING）
+
+  -- 社内SNS: 全社共通テーマ（021で投入済み）の id を後で取得
+  theme_global uuid;
+
   -- bcrypt hash of 'password123'
   pw_hash text := crypt('password123', gen_salt('bf'));
 
@@ -1007,6 +1046,234 @@ begin
     email = excluded.email,
     updated_at = now();
 
+  -- ==========================================================
+  -- STEP 8: 社内SNS（コミュニティ）モデルケース
+  --
+  -- 対応 migration: 020_community_sns / 021_community_weekly_themes /
+  --                 022_community_counters
+  -- like_count / comment_count / repost_count は 022 のトリガーが
+  -- 自動同期するため、ここでは手動設定しない（子行投入で同期される）。
+  -- 同一会社メンバーのみ見え合う（RLS方針）ため、各社のリアクション/
+  -- コメントはその会社の所属メンバーで構成する。
+  --   - co1（T's agency holdings）: adm1 / usr1
+  --   - co2（ゼロプライド株式会社）: adm2 / usr2
+  -- ==========================================================
+
+  -- 全社共通テーマ（021で投入済み）の id を取得
+  select id into theme_global
+    from public.community_weekly_themes
+   where company_id is null and title = '便利だったショートカット'
+   limit 1;
+
+  -- ---- 8-0. 会社別 週替わりテーマ（co1 限定） ----
+  insert into public.community_weekly_themes
+    (id, company_id, title, description, starts_on, ends_on, is_active, sort_order, created_by)
+  values
+    (wt_co1, co1, '社内ランチおすすめ',
+     'オフィス周辺やテレワーク中のおすすめランチを共有しよう。',
+     current_date, current_date + 6, true, 0, adm1)
+  on conflict (id) do nothing;
+
+  -- ---- 8-1. タグ ----
+  insert into public.community_post_tags (id, name, slug) values
+    (tag1, '業務効率化', 'efficiency'),
+    (tag2, 'ツール',     'tools'),
+    (tag3, '雑談',       'chat'),
+    (tag4, 'お知らせ',   'announce')
+  on conflict (id) do nothing;
+
+  -- ---- 8-2. 投稿（ORIGINAL） ----
+
+  -- cp1: usr1 / 週替わりテーマ（全社共通:ショートカット）に沿った投稿
+  insert into public.community_posts
+    (id, company_id, author_user_id, body, visibility, post_kind, source_kind, weekly_theme_id, created_at)
+  values
+    (cp1, co1, usr1,
+     E'今週のテーマ「便利だったショートカット」便乗です。\n' ||
+     E'Windowsの「Win + V」でクリップボード履歴が出るの、最近知って世界変わりました。コピペ往復が激減します🙌',
+     'COMPANY', 'ORIGINAL', 'INTERNAL', theme_global, now() - interval '5 hours')
+  on conflict (id) do nothing;
+
+  -- cp2: adm1 / 全社お知らせ
+  insert into public.community_posts
+    (id, company_id, author_user_id, body, visibility, post_kind, source_kind, created_at)
+  values
+    (cp2, co1, adm1,
+     E'【お知らせ】来週の全社定例は水曜10:00からに変更します。アジェンダは前日までに共有予定です。よろしくお願いします。',
+     'COMPANY', 'ORIGINAL', 'INTERNAL', now() - interval '8 hours')
+  on conflict (id) do nothing;
+
+  -- cp3: usr1 / タグ付き投稿
+  insert into public.community_posts
+    (id, company_id, author_user_id, body, visibility, post_kind, source_kind, created_at)
+  values
+    (cp3, co1, usr1,
+     E'議事録の自動文字起こし、ツールを乗り換えたら精度がかなり上がりました。\n' ||
+     E'同じように探している人いたら共有するので声かけてください。',
+     'COMPANY', 'ORIGINAL', 'INTERNAL', now() - interval '1 day 2 hours')
+  on conflict (id) do nothing;
+
+  -- cp7: usr1 / PRIVATE（本人のみ閲覧。公開範囲の確認用）
+  insert into public.community_posts
+    (id, company_id, author_user_id, body, visibility, post_kind, source_kind, created_at)
+  values
+    (cp7, co1, usr1,
+     E'（自分用メモ）来月の勉強会ネタ候補: ショートカット集 / 議事録ツール比較 / Notion整理術',
+     'PRIVATE', 'ORIGINAL', 'INTERNAL', now() - interval '30 minutes')
+  on conflict (id) do nothing;
+
+  -- cp8: usr1 / 会社別テーマ（社内ランチ）に沿った投稿
+  insert into public.community_posts
+    (id, company_id, author_user_id, body, visibility, post_kind, source_kind, weekly_theme_id, created_at)
+  values
+    (cp8, co1, usr1,
+     E'テーマ「社内ランチおすすめ」！オフィス裏の定食屋、日替わり800円で味噌汁おかわり自由です。早めに行かないと並びます🍚',
+     'COMPANY', 'ORIGINAL', 'INTERNAL', wt_co1, now() - interval '3 hours')
+  on conflict (id) do nothing;
+
+  -- ---- 8-3. 社外SNS取込（external_drafts → EXTERNAL_IMPORT 投稿） ----
+
+  -- cp6: 広報が社外発信をフィードへ取り込んだ投稿
+  insert into public.community_posts
+    (id, company_id, author_user_id, body, visibility, post_kind, source_kind, source_url, created_at)
+  values
+    (cp6, co1, adm1,
+     E'【プレスリリース】当社の新サービスが公開されました🎉 社外向け発信を社内にも共有します。詳細は元記事をご覧ください。',
+     'COMPANY', 'ORIGINAL', 'EXTERNAL_IMPORT',
+     'https://example.com/news/new-service-launch', now() - interval '6 hours')
+  on conflict (id) do nothing;
+
+  -- external_drafts: PUBLISHED（cp6 として公開済）
+  insert into public.community_external_drafts
+    (id, company_id, created_by, source_url, og_title, og_description, og_image_url, og_site_name,
+     draft_body, status, published_post_id, fetched_at)
+  values
+    (ed1, co1, adm1,
+     'https://example.com/news/new-service-launch',
+     '新サービス「ConnectX」提供開始のお知らせ',
+     '業務コミュニケーションを効率化する新サービスを本日リリースしました。',
+     'https://picsum.photos/seed/pressrelease/1200/630',
+     'Example News',
+     E'【プレスリリース】当社の新サービスが公開されました🎉',
+     'PUBLISHED', cp6, now() - interval '6 hours')
+  on conflict (id) do nothing;
+
+  -- external_drafts: DRAFT（未公開・下書きのまま。取込→公開前の状態確認用）
+  insert into public.community_external_drafts
+    (id, company_id, created_by, source_url, og_title, og_description, og_image_url, og_site_name,
+     draft_body, status, fetched_at)
+  values
+    (ed2, co1, adm1,
+     'https://example.com/blog/teamwork-tips',
+     'チームの生産性を上げる5つの習慣',
+     'リモートワーク時代のチーム運営で意識したいポイントをまとめました。',
+     'https://picsum.photos/seed/blogdraft/1200/630',
+     'Example Blog',
+     E'参考になりそうな記事を見つけたので共有用に下書きしています。',
+     'DRAFT', now() - interval '2 hours')
+  on conflict (id) do nothing;
+
+  -- ---- 8-4. 引用（QUOTE）／リポスト（REPOST） ----
+  --   repost_of_id 先のカウンタは 022 トリガーが自動更新する
+
+  -- cp4: adm1 が cp1 を引用（QUOTE: body あり）
+  insert into public.community_posts
+    (id, company_id, author_user_id, body, visibility, post_kind, repost_of_id, source_kind, created_at)
+  values
+    (cp4, co1, adm1,
+     E'これ便利ですね！全社で共有したい小ワザです。みんなのおすすめショートカットもこのスレに集めましょう。',
+     'COMPANY', 'QUOTE', cp1, 'INTERNAL', now() - interval '4 hours')
+  on conflict (id) do nothing;
+
+  -- cp5: usr1 が cp2 をリポスト（REPOST: body 空）
+  insert into public.community_posts
+    (id, company_id, author_user_id, body, visibility, post_kind, repost_of_id, source_kind, created_at)
+  values
+    (cp5, co1, usr1,
+     '', 'COMPANY', 'REPOST', cp2, 'INTERNAL', now() - interval '7 hours')
+  on conflict (id) do nothing;
+
+  -- ---- 8-5. co2（ゼロプライド株式会社）側のフィード ----
+
+  insert into public.community_posts
+    (id, company_id, author_user_id, body, visibility, post_kind, source_kind, weekly_theme_id, created_at)
+  values
+    (cp11, co2, usr2,
+     E'「便利だったショートカット」テーマ便乗。Slackの「Ctrl + K」でチャンネル即移動、地味に毎日使ってます。',
+     'COMPANY', 'ORIGINAL', 'INTERNAL', theme_global, now() - interval '6 hours')
+  on conflict (id) do nothing;
+
+  insert into public.community_posts
+    (id, company_id, author_user_id, body, visibility, post_kind, source_kind, created_at)
+  values
+    (cp12, co2, adm2,
+     E'【お知らせ】社内SNSの運用を今日から開始しました。気軽に投稿・リアクションしてみてください！',
+     'COMPANY', 'ORIGINAL', 'INTERNAL', now() - interval '1 day')
+  on conflict (id) do nothing;
+
+  insert into public.community_posts
+    (id, company_id, author_user_id, body, visibility, post_kind, repost_of_id, source_kind, created_at)
+  values
+    (cp13, co2, usr2,
+     '', 'COMPANY', 'REPOST', cp12, 'INTERNAL', now() - interval '20 hours')
+  on conflict (id) do nothing;
+
+  -- ---- 8-6. タグ紐付け（relations） ----
+  insert into public.community_post_tag_relations (post_id, tag_id) values
+    (cp1, tag1), (cp1, tag2),   -- ショートカット投稿: 業務効率化 / ツール
+    (cp3, tag1), (cp3, tag2),   -- 議事録ツール: 業務効率化 / ツール
+    (cp8, tag3),                -- ランチ: 雑談
+    (cp2, tag4)                 -- お知らせ
+  on conflict (post_id, tag_id) do nothing;
+
+  -- ---- 8-7. いいね（LIKE）+ 絵文字リアクション ----
+  --   unique(post_id, user_id, reaction) / 022 が like_count を同期
+  insert into public.community_post_reactions (id, post_id, user_id, reaction, created_at) values
+    -- cp1（usr1の投稿）に adm1 がいいね + 絵文字
+    ('6d000001-0000-0000-0000-000000000000', cp1, adm1, 'LIKE',   now() - interval '4 hours'),
+    ('6d000002-0000-0000-0000-000000000000', cp1, adm1, 'THANKS', now() - interval '4 hours'),
+    ('6d000003-0000-0000-0000-000000000000', cp1, usr1, 'EYES',   now() - interval '3 hours'),
+    -- cp2（adm1のお知らせ）に usr1 がいいね
+    ('6d000004-0000-0000-0000-000000000000', cp2, usr1, 'LIKE',   now() - interval '7 hours'),
+    -- cp3（usr1の議事録投稿）に adm1 がいいね + CLAP
+    ('6d000005-0000-0000-0000-000000000000', cp3, adm1, 'LIKE',   now() - interval '1 day'),
+    ('6d000006-0000-0000-0000-000000000000', cp3, adm1, 'CLAP',   now() - interval '1 day'),
+    -- cp8（ランチ投稿）に adm1 がいいね + PARTY
+    ('6d000007-0000-0000-0000-000000000000', cp8, adm1, 'LIKE',   now() - interval '2 hours'),
+    ('6d000008-0000-0000-0000-000000000000', cp8, adm1, 'PARTY',  now() - interval '2 hours'),
+    -- co2: cp11 に adm2 / cp12 に usr2
+    ('6d000011-0000-0000-0000-000000000000', cp11, adm2, 'LIKE',  now() - interval '5 hours'),
+    ('6d000012-0000-0000-0000-000000000000', cp11, adm2, 'CLAP',  now() - interval '5 hours'),
+    ('6d000013-0000-0000-0000-000000000000', cp12, usr2, 'LIKE',  now() - interval '22 hours')
+  on conflict (id) do nothing;
+
+  -- ---- 8-8. コメント（通常 + 1段返信） ----
+  --   022 が comment_count を同期。返信は parent 投入後に挿入。
+  insert into public.community_post_comments
+    (id, post_id, author_user_id, parent_comment_id, body, created_at)
+  values
+    (cm1, cp1, adm1, null, E'これ知らなかった…！明日から使います。ありがとうございます🙏', now() - interval '3 hours 30 minutes'),
+    (cm2, cp1, usr1, null, E'ぜひ！定型文の貼り付けが多い人ほど効きます。', now() - interval '3 hours'),
+    (cm4, cp3, adm1, null, E'気になります。今度おすすめのツール教えてください。', now() - interval '23 hours'),
+    (cm5, cp11, adm2, null, E'Ctrl + K 便利ですよね。チャンネル名うろ覚えでも飛べるのが助かります。', now() - interval '5 hours 30 minutes')
+  on conflict (id) do nothing;
+
+  -- cm3: cm1 への返信（親が存在してから挿入）
+  insert into public.community_post_comments
+    (id, post_id, author_user_id, parent_comment_id, body, created_at)
+  values
+    (cm3, cp1, usr1, cm1, E'お役に立てて良かったです！Macだと「Cmd + Shift + V」が近いです。', now() - interval '2 hours 50 minutes')
+  on conflict (id) do nothing;
+
+  -- ---- 8-9. 通報（モデレーション確認用） ----
+  insert into public.community_post_reports
+    (id, post_id, reported_by, reason, detail, status, created_at)
+  values
+    (rp1, cp6, usr1, 'OTHER',
+     E'社外発信の取込ですが、掲載可否の確認が取れているか念のため確認したいです。',
+     'PENDING', now() - interval '1 hour')
+  on conflict (id) do nothing;
+
   raise notice '===========================================';
   raise notice '002_seed_dev.sql の投入が完了しました。';
   raise notice '  MASTER_ADMIN: 1件 (master@example.com)';
@@ -1018,6 +1285,12 @@ begin
   raise notice '  気軽投稿 (CASUAL): 16件';
   raise notice '    OPEN: 9件 / DRAFT: 3件 / IN_PROGRESS: 1件 / CLOSED: 3件';
   raise notice '  applications: 14件 (APPLY: 9件 / INQUIRY: 5件)';
+  raise notice '  --- 社内SNS（コミュニティ）---';
+  raise notice '  community_posts: 11件 (ORIGINAL 7 / QUOTE 1 / REPOST 3)';
+  raise notice '    co1: 8件 / co2: 3件 / EXTERNAL_IMPORT 1件 / PRIVATE 1件';
+  raise notice '  reactions: 11件 / comments: 5件(返信1含) / tags: 4件+relations 6件';
+  raise notice '  weekly_themes(会社別): 1件 / external_drafts: 2件 / reports: 1件';
+  raise notice '  ※ like/comment/repost_count は 022 トリガーで自動同期';
   raise notice '  共通パスワード: password123';
   raise notice '===========================================';
 

@@ -55,7 +55,11 @@ export function PostDetailPane({
   post,
   onApplicationSuccess,
 }: PostDetailPaneProps) {
-  const { isOpen: modalIsOpen, onOpen: openModal, onClose: closeModal } = useDisclosure();
+  const {
+    isOpen: modalIsOpen,
+    onOpen: openModal,
+    onClose: closeModal,
+  } = useDisclosure();
   const [modalType, setModalType] = useState<ApplicationType>("APPLY");
   const [appliedTypes, setAppliedTypes] = useState<Set<ApplicationType>>(
     new Set(),
@@ -85,14 +89,20 @@ export function PostDetailPane({
       const {
         data: { user },
       } = await supabase.auth.getUser();
-      console.log("[PostDetailPane] fetchStatus user:", user ? `uid=${user.id}` : "null (セッションなし)");
+      console.log(
+        "[PostDetailPane] fetchStatus user:",
+        user ? `uid=${user.id}` : "null (セッションなし)",
+      );
       if (!user) return;
       const { data, error } = await supabase
         .from("applications")
         .select("application_type")
         .eq("post_id", post.id)
         .eq("applicant_user_id", user.id);
-      console.log("[PostDetailPane] 応募状態:", { data, error: error?.message });
+      console.log("[PostDetailPane] 応募状態:", {
+        data,
+        error: error?.message,
+      });
       if (data) {
         setAppliedTypes(
           new Set(data.map((a) => a.application_type as ApplicationType)),
@@ -163,7 +173,10 @@ export function PostDetailPane({
               <Button
                 size="md"
                 onPress={() => {
-                  console.log("[PostDetailPane] 応募ボタン押下:", { post_id: post.id, post_type: post.post_type });
+                  console.log("[PostDetailPane] 応募ボタン押下:", {
+                    post_id: post.id,
+                    post_type: post.post_type,
+                  });
                   setModalType("APPLY");
                   openModal();
                 }}
