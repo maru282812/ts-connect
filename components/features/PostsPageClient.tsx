@@ -31,9 +31,9 @@ const TABS: { key: TabType; label: string }[] = [
   { key: "CLOSED", label: "募集終了" },
 ];
 
-// 右サイドバー(おすすめ/人気困りごと/人気タグ)は第1弾リリースでは非表示
-// （社内SNS関連のみ。memory/release_scope_phase1.md）。次フェーズで true に戻す。
-const SHOW_POSTS_SIDEBAR = false;
+// 右サイドバー(おすすめ/人気困りごと/人気タグ)。第2弾（phase-2）で公開。
+// おすすめは lib/recommend.ts の実データ（未適用/0件時は仮データ表示）。
+const SHOW_POSTS_SIDEBAR = true;
 
 interface PostsPageClientProps {
   newPostHref?: string;

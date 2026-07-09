@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { CompanyNewsPanel } from "@/components/features/CompanyNewsPanel";
 import { WeeklyThemePanel } from "@/components/features/WeeklyThemePanel";
 import {
   createComment,
@@ -932,14 +933,15 @@ export function CommunityFeedClient() {
         </div>
         {/* /中央タイムライン列 */}
 
-        {/* 右カラム: 週替わりテーマ（xl 以上で表示・sticky風） */}
+        {/* 右カラム: 週替わりテーマ + 社内報（xl 以上で表示・sticky風） */}
         <aside className="hidden w-80 shrink-0 xl:block">
-          <div className="sticky top-0">
+          <div className="sticky top-0 space-y-4">
             <WeeklyThemePanel
               active={activeTheme}
               upcoming={upcomingThemes}
               onUse={handleUseTheme}
             />
+            <CompanyNewsPanel />
           </div>
         </aside>
       </div>
