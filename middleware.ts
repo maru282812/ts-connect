@@ -66,13 +66,13 @@ export async function middleware(request: NextRequest) {
     // ログイン済みユーザーがログイン/サインアップページへアクセスした場合
     if (pathname === "/login" || pathname === "/signup") {
       return NextResponse.redirect(
-        new URL(isAdmin ? "/company/posts" : "/app/posts", request.url),
+        new URL(isAdmin ? "/company/posts" : "/app", request.url),
       );
     }
 
     // /company/* は ADMIN / MASTER_ADMIN のみアクセス可能
     if (!isAdmin) {
-      return NextResponse.redirect(new URL("/app/posts", request.url));
+      return NextResponse.redirect(new URL("/app", request.url));
     }
   }
 

@@ -483,6 +483,17 @@ export function CommunityFeedClient() {
             </div>
           </div>
 
+          {/* 今週のテーマ（スマホ/タブレット用・xl未満。右カラムが消える幅でも投稿導線を残す） */}
+          {activeTheme && (
+            <div className="mb-6 xl:hidden">
+              <WeeklyThemePanel
+                active={activeTheme}
+                upcoming={[]}
+                onUse={handleUseTheme}
+              />
+            </div>
+          )}
+
           {/* コンポーザ */}
           <div className="mb-6 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             {themeForPost && (

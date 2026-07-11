@@ -239,6 +239,15 @@ export const sidebarGroups = [
         roles: ["USER", "ADMIN", "MASTER_ADMIN"],
       },
       {
+        id: "user-newsletter",
+        label: "社内報",
+        href: "/app/newsletter",
+        matchHrefs: ["/app/newsletter"],
+        icon: "article",
+        lifecycle: "implemented",
+        roles: ["USER", "ADMIN", "MASTER_ADMIN"],
+      },
+      {
         id: "issues",
         label: "困りごと",
         href: "/app/issues",
@@ -667,6 +676,7 @@ export const CURRENT_RELEASE_ITEM_IDS: ReadonlySet<string> = new Set<string>([
   "user-applications",
   "user-my-page",
   "user-my-posts",
+  "user-newsletter",
   "admin-user-posts",
   "admin-user-casual-new",
   "admin-user-applications",
