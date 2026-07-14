@@ -1295,3 +1295,280 @@ begin
   raise notice '===========================================';
 
 end $seed$;
+
+-- ============================================================
+-- 002-2. フェーズ2 機能の検証用シード
+--
+-- 対象: マイページ拡張 / 社員検索 / 案件オススメ / 社内報
+--   （いいね・リポスト・週替わりテーマは上のブロックで投入済み）
+--
+-- 「あなたへのオススメ」は user_profiles.skills + special_skills と
+-- 案件に付いた post_tags.name の一致で出る（lib/recommend.ts）。
+-- そのため下のスキルとタグは意図的に重ねてある。
+--   例) 田中 太郎(usr1): HTML/CSS/Excel
+--       → p_off3「コーポレートサイトの軽微な修正」(HTML, CSS)
+--       → p_off1「経費精算レシートの整理」(Excel)
+--
+-- 上のブロックと同様、固定 UUID + upsert で何度流しても同じ状態になる。
+-- ============================================================
+
+do $seed2$
+declare
+  -- ===== 会社（上のブロックと同一） =====
+  co1 uuid := '11111111-1111-1111-1111-111111111111'; -- T's agency holdings
+  co2 uuid := '22222222-2222-2222-2222-222222222222'; -- ゼロプライド株式会社
+  co3 uuid := '33333333-3333-3333-3333-333333333333'; -- 株式会社ULTI-ME
+  co4 uuid := '44444444-4444-4444-4444-444444444444'; -- 株式会社T's grace
+  co5 uuid := '55555555-5555-5555-5555-555555555555'; -- 株式会社TSHD
+
+  -- ===== ユーザー（上のブロックと同一） =====
+  adm1 uuid := 'aa000001-0000-0000-0000-000000000000'; -- 管理者A / co1
+  adm2 uuid := 'aa000002-0000-0000-0000-000000000000'; -- 管理者B / co2
+  adm3 uuid := 'aa000003-0000-0000-0000-000000000000'; -- 管理者C / co3
+  usr1 uuid := 'bb000001-0000-0000-0000-000000000000'; -- 田中 太郎 / co1
+  usr2 uuid := 'bb000002-0000-0000-0000-000000000000'; -- 佐藤 花子 / co2
+  usr3 uuid := 'bb000003-0000-0000-0000-000000000000'; -- 鈴木 一郎 / co3
+  usr4 uuid := 'bb000004-0000-0000-0000-000000000000'; -- 高橋 健太 / co4
+  usr5 uuid := 'bb000005-0000-0000-0000-000000000000'; -- 伊藤 美紀 / co5
+
+  -- ===== 公開中の公式案件（オススメの対象） =====
+  p_off1 uuid := 'cc000001-0000-0000-0000-000000000000'; -- 経費精算レシートの整理・データ入力
+  p_off3 uuid := 'cc000003-0000-0000-0000-000000000000'; -- コーポレートサイトの軽微な修正
+  p_off4 uuid := 'cc000004-0000-0000-0000-000000000000'; -- 顧客アンケート結果の集計・レポート作成
+  p_off6 uuid := 'cc000006-0000-0000-0000-000000000000'; -- 名刺データ入力・顧客マスタ整備
+
+  -- ===== 部署 =====
+  d_co1_admin uuid := '73000001-0000-0000-0000-000000000000';
+  d_co1_dev   uuid := '73000002-0000-0000-0000-000000000000';
+  d_co2_plan  uuid := '73000003-0000-0000-0000-000000000000';
+  d_co3_mkt   uuid := '73000004-0000-0000-0000-000000000000';
+  d_co4_desg  uuid := '73000005-0000-0000-0000-000000000000';
+  d_co5_hr    uuid := '73000006-0000-0000-0000-000000000000';
+
+  -- ===== 案件タグ（マッチング用） =====
+  t_excel  uuid := '74000001-0000-0000-0000-000000000000'; -- Excel
+  t_input  uuid := '74000002-0000-0000-0000-000000000000'; -- データ入力
+  t_keiri  uuid := '74000003-0000-0000-0000-000000000000'; -- 経理
+  t_html   uuid := '74000004-0000-0000-0000-000000000000'; -- HTML
+  t_css    uuid := '74000005-0000-0000-0000-000000000000'; -- CSS
+  t_web    uuid := '74000006-0000-0000-0000-000000000000'; -- Webサイト運用
+  t_ppt    uuid := '74000007-0000-0000-0000-000000000000'; -- PowerPoint
+  t_bunseki uuid := '74000008-0000-0000-0000-000000000000'; -- データ分析
+  t_jimu   uuid := '74000009-0000-0000-0000-000000000000'; -- 事務
+  t_design uuid := '74000010-0000-0000-0000-000000000000'; -- デザイン
+
+  -- ===== 社内報 =====
+  nl1 uuid := '75000001-0000-0000-0000-000000000000'; -- 全社 PUBLISHED / ピックアップ
+  nl2 uuid := '75000002-0000-0000-0000-000000000000'; -- 全社 PUBLISHED / 社員紹介
+  nl3 uuid := '75000003-0000-0000-0000-000000000000'; -- co1 限定 PUBLISHED / 特集
+  nl4 uuid := '75000004-0000-0000-0000-000000000000'; -- 全社 PUBLISHED / お知らせ
+  nl5 uuid := '75000005-0000-0000-0000-000000000000'; -- 全社 DRAFT（管理画面の下書き確認用）
+begin
+
+  -- ============================================================
+  -- 1. 部署（社員検索の「部署」表示に使う）
+  -- ============================================================
+  insert into public.departments (id, company_id, name, sort_order) values
+    (d_co1_admin, co1, '管理部',           0),
+    (d_co1_dev,   co1, '開発部',           1),
+    (d_co2_plan,  co2, '企画部',           0),
+    (d_co3_mkt,   co3, 'マーケティング部', 0),
+    (d_co4_desg,  co4, '制作部',           0),
+    (d_co5_hr,    co5, '人事部',           0)
+  on conflict (id) do update
+    set company_id = excluded.company_id,
+        name       = excluded.name,
+        sort_order = excluded.sort_order;
+
+  -- 所属メンバーに部署・役職を割り当てる（社員検索の表示項目）
+  update public.company_members set department_id = d_co1_admin, job_title = '管理部 部長'       where user_id = adm1 and company_id = co1;
+  update public.company_members set department_id = d_co1_dev,   job_title = 'フロントエンド'    where user_id = usr1 and company_id = co1;
+  update public.company_members set department_id = d_co2_plan,  job_title = '企画部 マネージャー' where user_id = adm2 and company_id = co2;
+  update public.company_members set department_id = d_co2_plan,  job_title = 'プランナー'        where user_id = usr2 and company_id = co2;
+  update public.company_members set department_id = d_co3_mkt,   job_title = 'マーケ部 部長'     where user_id = adm3 and company_id = co3;
+  update public.company_members set department_id = d_co3_mkt,   job_title = 'データアナリスト'  where user_id = usr3 and company_id = co3;
+  update public.company_members set department_id = d_co4_desg,  job_title = 'デザイナー'        where user_id = usr4 and company_id = co4;
+  update public.company_members set department_id = d_co5_hr,    job_title = '人事担当'          where user_id = usr5 and company_id = co5;
+
+  -- ============================================================
+  -- 2. マイページ拡張 / 社員検索用プロフィール
+  --    skills・special_skills は下の案件タグと意図的に重ねてある（オススメ検証用）
+  -- ============================================================
+  insert into public.user_profiles
+    (user_id, bio, skills, special_skills, hobbies, interest_themes, consult_topics, availability)
+  values
+    (usr1,
+     '受託開発チームでフロントエンドを担当しています。社内ツールの改善も好きです。',
+     array['HTML','CSS','JavaScript'], array['Excel'],
+     array['キャンプ','サウナ'],
+     '業務効率化・社内ツール開発',
+     'フロントエンド全般、Excel での自動化', 'AVAILABLE'),
+    (usr2,
+     '企画部で新規サービスの立ち上げを担当。数字を見るのが得意です。',
+     array['Excel','データ入力'], array['PowerPoint'],
+     array['読書','カフェ巡り'],
+     '新規事業・マーケティング',
+     '資料作成、アンケート設計', 'PART_TIME'),
+    (usr3,
+     'マーケ部でデータ分析をしています。SQL とダッシュボード作りが本業。',
+     array['データ分析','Excel'], array['SQL'],
+     array['ランニング','写真'],
+     'データ活用・可視化',
+     'データ分析、ダッシュボード設計', 'AVAILABLE'),
+    (usr4,
+     '制作部のデザイナー。UI からグラフィックまで幅広くやります。',
+     array['デザイン','Figma'], array['イラスト'],
+     array['映画鑑賞','料理'],
+     'UI/UX・ブランディング',
+     'デザインレビュー、Figma の使い方', 'AVAILABLE'),
+    (usr5,
+     '人事担当。採用と社内制度づくりをしています。気軽に相談してください。',
+     array['採用','労務'], array['キャリア相談'],
+     array['ヨガ','旅行'],
+     '組織づくり・働き方',
+     'キャリア相談、社内制度について', 'PART_TIME'),
+    (adm1,
+     '管理部の部長です。社内の困りごとは一通り拾います。',
+     array['マネジメント','経理'], array['Excel'],
+     array['ゴルフ'],
+     '業務改善・コスト最適化',
+     '経費精算まわり、社内フローの相談', 'UNAVAILABLE'),
+    (adm2,
+     '企画部マネージャー。新規案件の相談歓迎です。',
+     array['企画','マーケティング'], array['PowerPoint'],
+     array['音楽鑑賞'],
+     '新規事業',
+     '企画の壁打ち', 'PART_TIME'),
+    (adm3,
+     'マーケティング部長。数字と現場の橋渡しをしています。',
+     array['マーケティング','データ分析'], array['Excel'],
+     array['登山'],
+     'データドリブンな意思決定',
+     'マーケ施策の相談', 'PART_TIME')
+  on conflict (user_id) do update
+    set bio             = excluded.bio,
+        skills          = excluded.skills,
+        special_skills  = excluded.special_skills,
+        hobbies         = excluded.hobbies,
+        interest_themes = excluded.interest_themes,
+        consult_topics  = excluded.consult_topics,
+        availability    = excluded.availability;
+
+  -- ============================================================
+  -- 3. 案件タグ（「あなたへのオススメ」のマッチング元）
+  -- ============================================================
+  insert into public.post_tags (id, name, slug, is_active) values
+    (t_excel,   'Excel',         'excel',          true),
+    (t_input,   'データ入力',    'data-input',     true),
+    (t_keiri,   '経理',          'keiri',          true),
+    (t_html,    'HTML',          'html',           true),
+    (t_css,     'CSS',           'css',            true),
+    (t_web,     'Webサイト運用', 'web-operation',  true),
+    (t_ppt,     'PowerPoint',    'powerpoint',     true),
+    (t_bunseki, 'データ分析',    'data-analysis',  true),
+    (t_jimu,    '事務',          'jimu',           true),
+    (t_design,  'デザイン',      'design',         true)
+  on conflict (id) do update
+    set name      = excluded.name,
+        is_active = excluded.is_active;
+
+  -- 公開中(OPEN)の公式案件にタグを付与する
+  insert into public.post_tag_relations (post_id, tag_id) values
+    -- 経費精算レシートの整理・データ入力サポート
+    (p_off1, t_excel), (p_off1, t_input), (p_off1, t_keiri),
+    -- コーポレートサイトの軽微な修正・更新対応（画像差し替えを含むため デザイン も付与）
+    (p_off3, t_html), (p_off3, t_css), (p_off3, t_web), (p_off3, t_design),
+    -- 顧客アンケート結果の集計・レポート作成
+    (p_off4, t_excel), (p_off4, t_ppt), (p_off4, t_bunseki),
+    -- 名刺データ入力・顧客マスタ整備サポート
+    (p_off6, t_input), (p_off6, t_excel), (p_off6, t_jimu)
+  on conflict (post_id, tag_id) do nothing;
+
+  -- ============================================================
+  -- 4. 社内報
+  --    一般ユーザーには PUBLISHED のみ見える（DRAFT は管理画面専用）
+  -- ============================================================
+  insert into public.newsletter_issues
+    (id, company_id, title, category, summary, body, cover_image_url,
+     status, published_at, is_pickup, view_count, created_by)
+  values
+    (nl1, null,
+     '2026年7月号：新体制と今期の重点テーマ',
+     'MONTHLY',
+     '新しい期のはじまりにあたり、今期のグループ全体の重点テーマを共有します。',
+     E'今期のグループ全体の重点テーマは「現場の困りごとを、現場の手で解決する」です。\n\n' ||
+     E'■ 今期の3つの柱\n' ||
+     E'1. 部署を越えた協力をあたりまえにする\n' ||
+     E'2. 社内の知見をためて、使えるようにする\n' ||
+     E'3. 小さな改善をすぐ試せる状態をつくる\n\n' ||
+     E'このポータルもその一環です。困りごとの相談、案件の募集、日々の気づきの共有に使ってください。',
+     'https://picsum.photos/seed/news202607/1200/630',
+     'PUBLISHED', now() - interval '2 days', true, 128, adm1),
+
+    (nl2, null,
+     '社員インタビュー：入社1年目のリアル',
+     'PEOPLE',
+     '今年入社したメンバーに、入社前の不安と入社後のギャップを聞きました。',
+     E'「入社前は、こんなに早く現場を任されるとは思っていませんでした」\n\n' ||
+     E'今回話を聞いたのは、昨年春に入社した3名。入社前の不安、実際に働いてみて感じたギャップ、\n' ||
+     E'そして今いちばん面白いと感じている仕事について語ってもらいました。\n\n' ||
+     E'■ 「わからないことを聞ける空気」がいちばん助かった\n' ||
+     E'配属直後はとにかく用語がわからず、議事録を取るだけで精一杯だったといいます。',
+     'https://picsum.photos/seed/interview01/1200/630',
+     'PUBLISHED', now() - interval '9 days', false, 74, adm1),
+
+    (nl3, co1,
+     '【T''s agency holdings】オフィス移転のお知らせと新レイアウト紹介',
+     'FEATURE',
+     '来月のオフィス移転にともなう新レイアウトと、フリーアドレスの運用ルールを紹介します。',
+     E'来月、本社オフィスを移転します。新オフィスはフリーアドレスを基本とし、\n' ||
+     E'集中したいときに使える個室ブースと、雑談しやすいオープンスペースを分けて配置しました。\n\n' ||
+     E'■ 席の使い方\n' ||
+     E'・固定席はありません。朝、空いている席を自由に使ってください。\n' ||
+     E'・Web会議は個室ブースを優先的に使ってください。',
+     'https://picsum.photos/seed/office2026/1200/630',
+     'PUBLISHED', now() - interval '5 days', false, 43, adm1),
+
+    (nl4, null,
+     '年末年始の休業期間について',
+     'NOTICE',
+     '年末年始の休業期間と、期間中の問い合わせ対応についてお知らせします。',
+     E'年末年始の休業期間は下記のとおりです。\n\n' ||
+     E'■ 休業期間\n12月29日（月）〜 1月4日（日）\n\n' ||
+     E'期間中の緊急連絡は各部署の代表者までお願いします。',
+     null,
+     'PUBLISHED', now() - interval '20 days', false, 201, adm1),
+
+    (nl5, null,
+     '【下書き】8月号：夏のリフレッシュ特集',
+     'MONTHLY',
+     '夏季休暇の過ごし方アンケートの結果をまとめる予定です。',
+     E'（執筆中）夏季休暇の過ごし方について社内アンケートを実施しました。',
+     null,
+     'DRAFT', null, false, 0, adm1)
+  on conflict (id) do update
+    set company_id      = excluded.company_id,
+        title           = excluded.title,
+        category        = excluded.category,
+        summary         = excluded.summary,
+        body            = excluded.body,
+        cover_image_url = excluded.cover_image_url,
+        status          = excluded.status,
+        published_at    = excluded.published_at,
+        is_pickup       = excluded.is_pickup,
+        view_count      = excluded.view_count,
+        created_by      = excluded.created_by;
+
+  raise notice '===========================================';
+  raise notice 'フェーズ2 シードの投入が完了しました。';
+  raise notice '  departments: 6件 / company_members に部署・役職を設定';
+  raise notice '  user_profiles: 8件（スキル・特技・趣味・興味テーマ・相談可否）';
+  raise notice '  post_tags: 10件 / post_tag_relations: 13件（OPEN な公式案件4件に付与）';
+  raise notice '  newsletter_issues: 5件（PUBLISHED 4 / DRAFT 1 / ピックアップ 1）';
+  raise notice '  ---';
+  raise notice '  「あなたへのオススメ」の確認例:';
+  raise notice '    user1@example.com → HTML/CSS/Excel なので「コーポレートサイト修正」「経費精算レシート整理」が出る';
+  raise notice '    user3@example.com → データ分析/Excel/SQL なので「顧客アンケート集計」が出る';
+  raise notice '===========================================';
+
+end $seed2$;

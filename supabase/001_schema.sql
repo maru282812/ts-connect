@@ -8,8 +8,9 @@
 --     （create table if not exists は既存テーブルに列を追加しないため）
 --
 -- 適用順: このファイル → 002_seed_dev.sql (任意)
--- 注意: 002_seed_dev.sql は検証用ユーザー・投稿を投入する開発用シードである。
---       実データの入った DB には流さないこと。
+-- 002_seed_dev.sql も冪等（固定 UUID + upsert / 削除なし）で、何度でも流し直せる。
+-- ただし検証用ユーザー・投稿を投入する開発用シードのため、
+-- 本物の顧客データが入った DB には流さないこと。
 --
 -- 統合済みパッチ:
 --   003_company_members_permissions.sql  (Section 5, 8)
