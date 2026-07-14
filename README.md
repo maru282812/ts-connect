@@ -93,16 +93,16 @@ cp .env.example .env.local
 
 ### 4. データベースのマイグレーション
 
-Supabase の SQL Editor で `supabase/migrations/001_initial.sql` を実行します。
+Supabase の SQL Editor で `supabase/001_schema.sql` を実行します。
+このファイル1本が完成形スキーマです（過去のマイグレーションはすべて統合済み。
+統合元は `supabase/migrations/archive/` に履歴として残しています）。
 
 ### 5. シードデータの投入
 
-1. Supabase Auth で以下のユーザーを作成します:
-   - `admin@example.com` / `password123`
-   - `user1@example.com` / `password123`
-   - `user2@example.com` / `password123`
-
-2. Supabase の SQL Editor で `supabase/seed.sql` を実行します。
+Supabase の SQL Editor で `supabase/002_seed_dev.sql` を実行します。
+検証用ユーザー（`master@example.com` / `admin1〜3@example.com` / `user1〜5@example.com`、
+いずれもパスワード `password123`）は auth.users ごとこの SQL が投入するため、
+Supabase Auth 側での事前作成は不要です。
 
 ### 6. 開発サーバーの起動
 

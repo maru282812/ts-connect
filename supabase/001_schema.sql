@@ -10,6 +10,19 @@
 --   004_service_role_grants.sql          (Section 5)
 --   006_fix_email_trigger.sql            (Section 3, 13)
 --
+-- 統合済みマイグレーション (migrations/archive/ に退避済み):
+--   020_community_sns.sql                    (Section 15)
+--   021_community_weekly_themes.sql          (Section 15)
+--   022_community_counters.sql               (Section 15.1)
+--   023_community_grants.sql                 (Section 15.4)
+--   024_community_tags_write.sql             (Section 15.3, 15.4)
+--   025_community_media_and_tag_curation.sql (Section 14, 15)
+--   026_community_mentions_and_polls.sql     (Section 1 notifications, Section 15)
+--   027_community_resolve_display_names.sql  (Section 15.1)
+--   028_user_profiles_phase2.sql             (Section 1 user_profiles, Section 17)
+--   029_newsletter.sql                       (Section 16)
+--   030_tags_themes_policies.sql             (Section 17)
+--
 -- Phase 2+ 拡張対応:
 --   Part 1: 既存テーブル拡張 (users / companies / posts / applications)
 --   Part 2: ユーザー・会社系テーブル追加 (予定)
@@ -168,6 +181,8 @@ create index if not exists applications_deleted_at_idx on public.applications(de
 -- ── user_profiles ──────────────────────────────────────────
 -- ユーザー拡張プロフィール。スキル・ポートフォリオ・稼働状況を管理する。
 -- Phase 2: マイページ・ユーザー検索画面で使用。
+-- bio / special_skills / hobbies / interest_themes / consult_topics は
+-- フェーズ2のマイページ拡張・社員検索で使用（旧 028_user_profiles_phase2.sql）。
 create table if not exists public.user_profiles (
   id                   uuid        primary key default gen_random_uuid(),
   user_id              uuid        not null unique references public.users(id) on delete cascade,
@@ -178,6 +193,11 @@ create table if not exists public.user_profiles (
   twitter_url          text,
   availability         text        check (availability in ('AVAILABLE', 'PART_TIME', 'UNAVAILABLE')),
   preferred_work_style text[],     -- 'REMOTE' / 'ONSITE' / 'HYBRID'
+  bio                  text,       -- 自己紹介
+  special_skills       text[],     -- 特技（例: プレゼン, 中国語）
+  hobbies              text[],     -- 趣味（例: キャンプ, サウナ）
+  interest_themes      text,       -- 興味テーマ（自由記述）
+  consult_topics       text,       -- 相談に乗れること（自由記述）
   created_at           timestamptz not null default now(),
   updated_at           timestamptz not null default now()
 );
@@ -559,7 +579,8 @@ create table if not exists public.notifications (
                check (type in (
                  'APPLICATION_RECEIVED', 'APPLICATION_STATUS_CHANGED',
                  'MESSAGE_RECEIVED', 'POST_CLOSED', 'INVITATION_RECEIVED',
-                 'ANNOUNCEMENT', 'SYSTEM', 'POINT_GRANTED', 'REVIEW_RECEIVED'
+                 'ANNOUNCEMENT', 'SYSTEM', 'POINT_GRANTED', 'REVIEW_RECEIVED',
+                 'MENTION'  -- 社内SNS のメンション通知（旧 026）
                )),
   title        text        not null,
   body         text        not null,
@@ -3384,3 +3405,875 @@ update public.users pu
   from auth.users au
  where pu.id = au.id
    and pu.email is distinct from au.email;
+
+-- ============================================================
+-- 15. 社内SNS（コミュニティ）
+-- ============================================================
+-- 旧 020_community_sns / 021_community_weekly_themes / 022_community_counters /
+--    023_community_grants / 024_community_tags_write /
+--    025_community_media_and_tag_curation / 026_community_mentions_and_polls /
+--    027_community_resolve_display_names を統合した最終形。
+-- 設計: docs/design/community_sns_design.md
+-- 方針: 既存 posts/post_tags（案件モデル）とは衝突させず community_ 接頭辞で分離する。
+--       画像/動画の本体は Storage（thumbnails バケット）に置き、DB はパス/メタのみ保持する。
+
+-- ── community_weekly_themes: 週替わりテーマ（company_id = NULL は全社共通） ──
+create table if not exists public.community_weekly_themes (
+  id          uuid        primary key default gen_random_uuid(),
+  company_id  uuid        references public.companies(id) on delete cascade,
+  title       text        not null,
+  description text,
+  starts_on   date        not null,
+  ends_on     date        not null,
+  is_active   boolean     not null default true,
+  sort_order  int         not null default 0,
+  created_by  uuid        references public.users(id),
+  created_at  timestamptz not null default now(),
+  updated_at  timestamptz not null default now(),
+  check (ends_on >= starts_on)
+);
+
+create index if not exists community_weekly_themes_company_idx
+  on public.community_weekly_themes(company_id);
+create index if not exists community_weekly_themes_active_idx
+  on public.community_weekly_themes(is_active, starts_on, ends_on);
+
+-- ── community_posts: 投稿本体（ORIGINAL/REPOST/QUOTE を自己参照で表現） ──
+create table if not exists public.community_posts (
+  id              uuid        primary key default gen_random_uuid(),
+  company_id      uuid        not null references public.companies(id) on delete cascade,
+  author_user_id  uuid        not null references public.users(id)     on delete cascade,
+  body            text        not null default '',
+  visibility      text        not null default 'COMPANY'
+                  check (visibility in ('COMPANY','DEPARTMENT','GROUP','ADMIN_ONLY','PRIVATE')),
+  department_id   uuid        references public.departments(id),
+  post_kind       text        not null default 'ORIGINAL'
+                  check (post_kind in ('ORIGINAL','REPOST','QUOTE')),
+  repost_of_id    uuid        references public.community_posts(id) on delete set null,
+  source_kind     text        not null default 'INTERNAL'
+                  check (source_kind in ('INTERNAL','EXTERNAL_IMPORT')),
+  source_url      text,
+  is_draft        boolean     not null default false,
+  is_hidden       boolean     not null default false,
+  hidden_by       uuid        references public.users(id),
+  hidden_reason   text,
+  like_count      int         not null default 0,
+  comment_count   int         not null default 0,
+  repost_count    int         not null default 0,
+  edited_at       timestamptz,
+  deleted_at      timestamptz,
+  created_at      timestamptz not null default now(),
+  updated_at      timestamptz not null default now(),
+  weekly_theme_id uuid        references public.community_weekly_themes(id) on delete set null
+);
+
+create index if not exists community_posts_company_idx      on public.community_posts(company_id);
+create index if not exists community_posts_author_idx       on public.community_posts(author_user_id);
+create index if not exists community_posts_created_idx      on public.community_posts(created_at desc);
+create index if not exists community_posts_repost_idx       on public.community_posts(repost_of_id);
+create index if not exists community_posts_deleted_idx      on public.community_posts(deleted_at) where deleted_at is null;
+create index if not exists community_posts_search_idx       on public.community_posts using gin(to_tsvector('simple', body));
+create index if not exists community_posts_weekly_theme_idx on public.community_posts(weekly_theme_id);
+
+-- ── community_post_attachments: 添付（Storage パス + メタのみ） ──
+create table if not exists public.community_post_attachments (
+  id               uuid        primary key default gen_random_uuid(),
+  post_id          uuid        not null references public.community_posts(id) on delete cascade,
+  uploaded_by      uuid        not null references public.users(id),
+  media_type       text        not null check (media_type in ('IMAGE','VIDEO')),
+  storage_path     text        not null,
+  thumbnail_path   text,
+  file_name        text        not null,
+  file_size        bigint      not null default 0,
+  mime_type        text,
+  width            int,
+  height           int,
+  duration_seconds int,
+  sort_order       int         not null default 0,
+  created_at       timestamptz not null default now()
+);
+create index if not exists community_attachments_post_idx on public.community_post_attachments(post_id);
+
+-- ── community_post_comments: コメント（1段返信） ──
+create table if not exists public.community_post_comments (
+  id                uuid        primary key default gen_random_uuid(),
+  post_id           uuid        not null references public.community_posts(id) on delete cascade,
+  author_user_id    uuid        not null references public.users(id) on delete cascade,
+  parent_comment_id uuid        references public.community_post_comments(id) on delete cascade,
+  body              text        not null,
+  is_hidden         boolean     not null default false,
+  deleted_at        timestamptz,
+  created_at        timestamptz not null default now(),
+  updated_at        timestamptz not null default now()
+);
+create index if not exists community_comments_post_idx on public.community_post_comments(post_id);
+
+-- ── community_post_reactions: いいね + 絵文字リアクション統合 ──
+create table if not exists public.community_post_reactions (
+  id         uuid        primary key default gen_random_uuid(),
+  post_id    uuid        not null references public.community_posts(id) on delete cascade,
+  user_id    uuid        not null references public.users(id) on delete cascade,
+  reaction   text        not null default 'LIKE',
+  created_at timestamptz not null default now(),
+  unique (post_id, user_id, reaction)
+);
+create index if not exists community_reactions_post_idx on public.community_post_reactions(post_id);
+
+-- ── community_post_tags / relations（usage_count は人気/代表タグの並び替え用） ──
+create table if not exists public.community_post_tags (
+  id          uuid        primary key default gen_random_uuid(),
+  name        text        not null unique,
+  slug        text        not null unique,
+  created_at  timestamptz not null default now(),
+  usage_count int         not null default 0
+);
+create index if not exists community_tags_usage_idx on public.community_post_tags(usage_count desc);
+
+create table if not exists public.community_post_tag_relations (
+  post_id uuid not null references public.community_posts(id)     on delete cascade,
+  tag_id  uuid not null references public.community_post_tags(id) on delete cascade,
+  primary key (post_id, tag_id)
+);
+
+-- ── community_post_reports: 通報 ──
+create table if not exists public.community_post_reports (
+  id          uuid        primary key default gen_random_uuid(),
+  post_id     uuid        not null references public.community_posts(id) on delete cascade,
+  reported_by uuid        not null references public.users(id),
+  reason      text        not null
+              check (reason in ('SPAM','INAPPROPRIATE','HARASSMENT','MISLEADING','OTHER')),
+  detail      text,
+  status      text        not null default 'PENDING'
+              check (status in ('PENDING','REVIEWED','RESOLVED','DISMISSED')),
+  reviewed_by uuid        references public.users(id),
+  reviewed_at timestamptz,
+  created_at  timestamptz not null default now(),
+  updated_at  timestamptz not null default now()
+);
+create index if not exists community_reports_post_idx   on public.community_post_reports(post_id);
+create index if not exists community_reports_status_idx on public.community_post_reports(status);
+
+-- ── community_external_drafts: 広報の社外発信 → 社内SNS下書き ──
+create table if not exists public.community_external_drafts (
+  id                uuid        primary key default gen_random_uuid(),
+  company_id        uuid        not null references public.companies(id) on delete cascade,
+  created_by        uuid        not null references public.users(id),
+  source_url        text        not null,
+  og_title          text,
+  og_description    text,
+  og_image_url      text,
+  og_site_name      text,
+  draft_body        text,
+  status            text        not null default 'DRAFT'
+                    check (status in ('DRAFT','PUBLISHED','DISCARDED')),
+  published_post_id uuid        references public.community_posts(id) on delete set null,
+  fetched_at        timestamptz,
+  created_at        timestamptz not null default now(),
+  updated_at        timestamptz not null default now()
+);
+create index if not exists community_external_drafts_company_idx on public.community_external_drafts(company_id);
+
+-- ── community_post_mentions: メンション（表示名はスナップショット保存） ──
+create table if not exists public.community_post_mentions (
+  post_id                uuid        not null references public.community_posts(id) on delete cascade,
+  mentioned_user_id      uuid        not null references public.users(id)           on delete cascade,
+  mentioned_display_name text        not null default '',
+  created_at             timestamptz not null default now(),
+  primary key (post_id, mentioned_user_id)
+);
+create index if not exists community_mentions_user_idx on public.community_post_mentions(mentioned_user_id);
+create index if not exists community_mentions_post_idx on public.community_post_mentions(post_id);
+
+-- ── アンケート（単一選択・1人1票） ──
+create table if not exists public.community_polls (
+  id             uuid        primary key default gen_random_uuid(),
+  post_id        uuid        not null unique references public.community_posts(id) on delete cascade,
+  allow_multiple boolean     not null default false,
+  closes_at      timestamptz,
+  created_at     timestamptz not null default now()
+);
+create index if not exists community_polls_post_idx on public.community_polls(post_id);
+
+create table if not exists public.community_poll_options (
+  id         uuid        primary key default gen_random_uuid(),
+  poll_id    uuid        not null references public.community_polls(id) on delete cascade,
+  label      text        not null,
+  sort_order int         not null default 0,
+  vote_count int         not null default 0,
+  created_at timestamptz not null default now()
+);
+create index if not exists community_poll_options_poll_idx on public.community_poll_options(poll_id);
+
+create table if not exists public.community_poll_votes (
+  id         uuid        primary key default gen_random_uuid(),
+  poll_id    uuid        not null references public.community_polls(id)        on delete cascade,
+  option_id  uuid        not null references public.community_poll_options(id) on delete cascade,
+  user_id    uuid        not null references public.users(id)                  on delete cascade,
+  created_at timestamptz not null default now(),
+  unique (poll_id, user_id)
+);
+create index if not exists community_poll_votes_poll_idx   on public.community_poll_votes(poll_id);
+create index if not exists community_poll_votes_option_idx on public.community_poll_votes(option_id);
+
+-- ============================================================
+-- 15.1 社内SNS: Functions / Triggers
+--   集計系は SECURITY DEFINER + search_path 固定（RLS をバイパスして正確に数える）
+-- ============================================================
+
+-- like_count: reaction='LIKE' の件数
+create or replace function public.community_sync_like_count()
+returns trigger as $$
+begin
+  update public.community_posts p
+     set like_count = (
+       select count(*) from public.community_post_reactions r
+        where r.post_id = p.id and r.reaction = 'LIKE'
+     )
+   where p.id = coalesce(new.post_id, old.post_id);
+  return null;
+end;
+$$ language plpgsql security definer set search_path = public;
+
+drop trigger if exists trg_community_like_count on public.community_post_reactions;
+create trigger trg_community_like_count
+  after insert or delete on public.community_post_reactions
+  for each row execute function public.community_sync_like_count();
+
+-- comment_count: 非削除コメント件数
+create or replace function public.community_sync_comment_count()
+returns trigger as $$
+begin
+  update public.community_posts p
+     set comment_count = (
+       select count(*) from public.community_post_comments c
+        where c.post_id = p.id and c.deleted_at is null
+     )
+   where p.id = coalesce(new.post_id, old.post_id);
+  return null;
+end;
+$$ language plpgsql security definer set search_path = public;
+
+drop trigger if exists trg_community_comment_count on public.community_post_comments;
+create trigger trg_community_comment_count
+  after insert or update or delete on public.community_post_comments
+  for each row execute function public.community_sync_comment_count();
+
+-- repost_count: 元投稿の被リポスト数（自己参照。更新先は repost_of_id が NULL の元投稿のため再帰しない）
+create or replace function public.community_sync_repost_count()
+returns trigger as $$
+declare
+  target uuid := coalesce(new.repost_of_id, old.repost_of_id);
+begin
+  if target is not null then
+    update public.community_posts p
+       set repost_count = (
+         select count(*) from public.community_posts r
+          where r.repost_of_id = p.id and r.deleted_at is null
+       )
+     where p.id = target;
+  end if;
+  return null;
+end;
+$$ language plpgsql security definer set search_path = public;
+
+drop trigger if exists trg_community_repost_count on public.community_posts;
+create trigger trg_community_repost_count
+  after insert or update of repost_of_id, deleted_at or delete on public.community_posts
+  for each row execute function public.community_sync_repost_count();
+
+-- usage_count: タグ紐付けの増減に同期
+create or replace function public.community_sync_tag_usage()
+returns trigger as $$
+begin
+  update public.community_post_tags t
+     set usage_count = (
+       select count(*) from public.community_post_tag_relations r
+        where r.tag_id = t.id
+     )
+   where t.id = coalesce(new.tag_id, old.tag_id);
+  return null;
+end;
+$$ language plpgsql security definer set search_path = public;
+
+drop trigger if exists trg_community_tag_usage on public.community_post_tag_relations;
+create trigger trg_community_tag_usage
+  after insert or delete on public.community_post_tag_relations
+  for each row execute function public.community_sync_tag_usage();
+
+-- vote_count: 票の増減に同期
+create or replace function public.community_sync_poll_votes()
+returns trigger as $$
+begin
+  update public.community_poll_options o
+     set vote_count = (
+       select count(*) from public.community_poll_votes v where v.option_id = o.id
+     )
+   where o.id = coalesce(new.option_id, old.option_id);
+  return null;
+end;
+$$ language plpgsql security definer set search_path = public;
+
+drop trigger if exists trg_community_poll_votes on public.community_poll_votes;
+create trigger trg_community_poll_votes
+  after insert or delete on public.community_poll_votes
+  for each row execute function public.community_sync_poll_votes();
+
+-- メンション行 → notifications 行を裏で作成（第1弾では通知ベルを出さないが将来の解禁に備える）
+-- notifications は authenticated に INSERT 権限が無いため SECURITY DEFINER で挿入する。
+create or replace function public.community_notify_mention()
+returns trigger as $$
+declare
+  v_author  uuid;
+  v_snippet text;
+begin
+  select author_user_id, left(coalesce(body, ''), 80)
+    into v_author, v_snippet
+    from public.community_posts
+   where id = new.post_id;
+
+  -- 自分自身へのメンションは通知しない
+  if new.mentioned_user_id = v_author then
+    return null;
+  end if;
+
+  insert into public.notifications (user_id, type, title, body, related_type, related_id)
+  values (
+    new.mentioned_user_id, 'MENTION', 'あなたがメンションされました',
+    coalesce(v_snippet, ''), 'community_post', new.post_id
+  );
+  return null;
+end;
+$$ language plpgsql security definer set search_path = public;
+
+drop trigger if exists trg_community_notify_mention on public.community_post_mentions;
+create trigger trg_community_notify_mention
+  after insert on public.community_post_mentions
+  for each row execute function public.community_notify_mention();
+
+-- updated_at 自動更新
+drop trigger if exists trg_community_weekly_themes_updated_at on public.community_weekly_themes;
+create trigger trg_community_weekly_themes_updated_at
+  before update on public.community_weekly_themes
+  for each row execute function public.update_updated_at();
+
+-- 同僚名簿 RPC（@補完用・最小列のみ / 自社の active メンバー）
+-- 通常 USER は他人の users を SELECT できないため、列を限定した SECURITY DEFINER で公開する。
+create or replace function public.community_member_directory(
+  keyword text default '',
+  lim     int  default 8
+)
+returns table (user_id uuid, display_name text)
+language sql
+security definer
+set search_path = public
+as $$
+  select distinct u.id, u.display_name
+    from public.company_members cm
+    join public.users u on u.id = cm.user_id
+   where cm.company_id = any(public.get_user_company_ids())
+     and cm.status = 'active'
+     and u.deleted_at is null
+     and u.id <> auth.uid()
+     and (keyword = '' or u.display_name ilike '%' || keyword || '%')
+   order by u.display_name
+   limit greatest(1, least(lim, 50));
+$$;
+
+grant execute on function public.community_member_directory(text, int) to authenticated;
+
+-- 表示名の一括解決（フィード/コメントの著者名が「不明」になる問題の対処・自社の同僚に限る）
+create or replace function public.community_resolve_display_names(ids uuid[])
+returns table (user_id uuid, display_name text)
+language sql
+security definer
+set search_path = public
+as $$
+  select u.id, u.display_name
+    from public.users u
+   where u.id = any(ids)
+     and exists (
+       select 1
+         from public.company_members cm
+        where cm.user_id = u.id
+          and cm.company_id = any(public.get_user_company_ids())
+     );
+$$;
+
+grant execute on function public.community_resolve_display_names(uuid[]) to authenticated;
+
+-- ============================================================
+-- 15.2 社内SNS: RLS 有効化
+-- ============================================================
+alter table public.community_posts              enable row level security;
+alter table public.community_post_attachments   enable row level security;
+alter table public.community_post_comments      enable row level security;
+alter table public.community_post_reactions     enable row level security;
+alter table public.community_post_tags          enable row level security;
+alter table public.community_post_tag_relations enable row level security;
+alter table public.community_post_reports       enable row level security;
+alter table public.community_external_drafts    enable row level security;
+alter table public.community_weekly_themes      enable row level security;
+alter table public.community_post_mentions      enable row level security;
+alter table public.community_polls              enable row level security;
+alter table public.community_poll_options       enable row level security;
+alter table public.community_poll_votes         enable row level security;
+
+-- ============================================================
+-- 15.3 社内SNS: RLS ポリシー
+-- ============================================================
+
+-- community_posts: 自社・非削除・非ドラフト（または本人）を閲覧
+create policy "community_posts: select visible" on public.community_posts
+  for select using (
+    deleted_at is null
+    and company_id = any(public.get_user_company_ids())
+    and (
+      author_user_id = auth.uid()
+      or (is_draft = false and visibility <> 'PRIVATE')
+    )
+  );
+create policy "community_posts: master select all" on public.community_posts
+  for select using (public.get_user_role() = 'MASTER_ADMIN');
+create policy "community_posts: insert own" on public.community_posts
+  for insert with check (
+    author_user_id = auth.uid()
+    and company_id = any(public.get_user_company_ids())
+  );
+create policy "community_posts: update own" on public.community_posts
+  for update using (author_user_id = auth.uid());
+create policy "community_posts: admin moderate" on public.community_posts
+  for update using (
+    public.get_user_role() in ('ADMIN','MASTER_ADMIN')
+    and company_id = any(public.get_user_company_ids())
+  );
+
+-- 子テーブル: 親投稿が見えれば見える / 本人のみ書込
+create policy "community_attachments: select via post" on public.community_post_attachments
+  for select using (
+    exists (select 1 from public.community_posts p where p.id = post_id)
+  );
+create policy "community_attachments: insert own" on public.community_post_attachments
+  for insert with check (uploaded_by = auth.uid());
+
+create policy "community_comments: select" on public.community_post_comments
+  for select using (deleted_at is null);
+create policy "community_comments: insert own" on public.community_post_comments
+  for insert with check (author_user_id = auth.uid());
+create policy "community_comments: update own" on public.community_post_comments
+  for update using (author_user_id = auth.uid());
+
+create policy "community_reactions: select" on public.community_post_reactions
+  for select using (true);
+create policy "community_reactions: insert own" on public.community_post_reactions
+  for insert with check (user_id = auth.uid());
+create policy "community_reactions: delete own" on public.community_post_reactions
+  for delete using (user_id = auth.uid());
+
+-- タグ: 参照は全員 / 新規タグ作成は認証ユーザー（重複は name/slug の一意制約で吸収）
+create policy "community_tags: select" on public.community_post_tags
+  for select using (true);
+create policy "community_tags: insert authenticated" on public.community_post_tags
+  for insert with check (auth.uid() is not null);
+
+-- タグ紐付け: 参照は全員 / 付与・削除は自分の投稿に限る
+create policy "community_tag_relations: select" on public.community_post_tag_relations
+  for select using (true);
+create policy "community_tag_relations: insert via own post" on public.community_post_tag_relations
+  for insert with check (
+    exists (
+      select 1 from public.community_posts p
+      where p.id = post_id and p.author_user_id = auth.uid()
+    )
+  );
+create policy "community_tag_relations: delete via own post" on public.community_post_tag_relations
+  for delete using (
+    exists (
+      select 1 from public.community_posts p
+      where p.id = post_id and p.author_user_id = auth.uid()
+    )
+  );
+
+create policy "community_reports: insert own" on public.community_post_reports
+  for insert with check (reported_by = auth.uid());
+create policy "community_reports: admin select" on public.community_post_reports
+  for select using (public.get_user_role() in ('ADMIN','MASTER_ADMIN'));
+create policy "community_reports: admin update" on public.community_post_reports
+  for update using (public.get_user_role() in ('ADMIN','MASTER_ADMIN'));
+
+create policy "community_drafts: own or admin" on public.community_external_drafts
+  for all
+  using (
+    created_by = auth.uid()
+    or (public.get_user_role() in ('ADMIN','MASTER_ADMIN')
+        and company_id = any(public.get_user_company_ids()))
+  )
+  with check (created_by = auth.uid());
+
+-- 週替わりテーマ: 全社共通(NULL) または自社は全員閲覧可 / 管理は ADMIN・MASTER_ADMIN
+create policy "weekly_themes: select in scope" on public.community_weekly_themes
+  for select using (
+    company_id is null
+    or company_id = any(public.get_user_company_ids())
+  );
+create policy "weekly_themes: admin manage" on public.community_weekly_themes
+  for all
+  using (
+    public.get_user_role() in ('ADMIN','MASTER_ADMIN')
+    and (company_id is null or company_id = any(public.get_user_company_ids()))
+  )
+  with check (
+    public.get_user_role() in ('ADMIN','MASTER_ADMIN')
+    and (company_id is null or company_id = any(public.get_user_company_ids()))
+  );
+
+-- メンション: 自分宛て、または親投稿が見えれば閲覧可 / 付与・削除は自分の投稿に限る
+create policy "community_mentions: select" on public.community_post_mentions
+  for select using (
+    mentioned_user_id = auth.uid()
+    or exists (select 1 from public.community_posts p where p.id = post_id)
+  );
+create policy "community_mentions: insert via own post" on public.community_post_mentions
+  for insert with check (
+    exists (
+      select 1 from public.community_posts p
+       where p.id = post_id and p.author_user_id = auth.uid()
+    )
+  );
+create policy "community_mentions: delete via own post" on public.community_post_mentions
+  for delete using (
+    exists (
+      select 1 from public.community_posts p
+       where p.id = post_id and p.author_user_id = auth.uid()
+    )
+  );
+
+-- アンケート: 親投稿が見えれば閲覧可 / 作成は自分の投稿に限る
+create policy "community_polls: select via post" on public.community_polls
+  for select using (
+    exists (select 1 from public.community_posts p where p.id = post_id)
+  );
+create policy "community_polls: insert via own post" on public.community_polls
+  for insert with check (
+    exists (
+      select 1 from public.community_posts p
+       where p.id = post_id and p.author_user_id = auth.uid()
+    )
+  );
+
+create policy "community_poll_options: select via poll" on public.community_poll_options
+  for select using (
+    exists (select 1 from public.community_polls pl where pl.id = poll_id)
+  );
+create policy "community_poll_options: insert via own post" on public.community_poll_options
+  for insert with check (
+    exists (
+      select 1
+        from public.community_polls pl
+        join public.community_posts p on p.id = pl.post_id
+       where pl.id = poll_id and p.author_user_id = auth.uid()
+    )
+  );
+
+-- 投票: 閲覧は全員（集計表示のため） / 自分の票のみ作成・削除
+create policy "community_poll_votes: select" on public.community_poll_votes
+  for select using (true);
+create policy "community_poll_votes: insert own" on public.community_poll_votes
+  for insert with check (user_id = auth.uid());
+create policy "community_poll_votes: delete own" on public.community_poll_votes
+  for delete using (user_id = auth.uid());
+
+-- ============================================================
+-- 15.4 社内SNS: GRANTS
+--   GRANT が無いと RLS に到達する前に "permission denied for table" で弾かれる。
+--   anon には付与しない / service_role には ALL。
+-- ============================================================
+grant all on public.community_posts              to service_role;
+grant all on public.community_post_attachments   to service_role;
+grant all on public.community_post_comments      to service_role;
+grant all on public.community_post_reactions     to service_role;
+grant all on public.community_post_tags          to service_role;
+grant all on public.community_post_tag_relations to service_role;
+grant all on public.community_post_reports       to service_role;
+grant all on public.community_external_drafts    to service_role;
+grant all on public.community_weekly_themes      to service_role;
+-- 注: community_post_mentions / community_polls / community_poll_options /
+--     community_poll_votes には service_role への GRANT を付けていない。
+--     旧 026 でも付与しておらず、現行 DB の状態と一致させるため意図的に踏襲する。
+--     （これらは authenticated クライアント経由でのみアクセスしている）
+
+grant select, insert, update         on public.community_posts              to authenticated;
+grant select, insert                 on public.community_post_attachments   to authenticated;
+grant select, insert, update         on public.community_post_comments      to authenticated;
+grant select, insert, delete         on public.community_post_reactions     to authenticated;
+grant select, insert                 on public.community_post_tags          to authenticated;
+grant select, insert, delete         on public.community_post_tag_relations to authenticated;
+grant select, insert, update         on public.community_post_reports       to authenticated;
+grant select, insert, update, delete on public.community_external_drafts    to authenticated;
+grant select, insert, update, delete on public.community_weekly_themes      to authenticated;
+grant select, insert, delete         on public.community_post_mentions      to authenticated;
+grant select, insert                 on public.community_polls              to authenticated;
+grant select, insert                 on public.community_poll_options       to authenticated;
+grant select, insert, delete         on public.community_poll_votes         to authenticated;
+
+-- ============================================================
+-- 15.5 社内SNS: Storage（community-media バケット）
+--   注: 実際の投稿添付は thumbnails バケットを再利用している（lib/community.ts）。
+--       community-media は将来の分離用に確保する。
+--   パス形式: {company_id}/{user_id}/...
+-- ============================================================
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values (
+  'community-media',
+  'community-media',
+  true,
+  52428800, -- 50MB
+  array[
+    'image/png','image/jpeg','image/webp','image/gif',
+    'video/mp4','video/webm'
+  ]
+)
+on conflict (id) do nothing;
+
+create policy "community-media: insert own folder"
+  on storage.objects for insert
+  with check (
+    bucket_id = 'community-media'
+    and auth.uid() is not null
+    and (storage.foldername(name))[2] = auth.uid()::text
+  );
+create policy "community-media: update own"
+  on storage.objects for update
+  using (
+    bucket_id = 'community-media'
+    and auth.uid() is not null
+    and (storage.foldername(name))[2] = auth.uid()::text
+  );
+create policy "community-media: delete own"
+  on storage.objects for delete
+  using (
+    bucket_id = 'community-media'
+    and auth.uid() is not null
+    and (storage.foldername(name))[2] = auth.uid()::text
+  );
+create policy "community-media: public select"
+  on storage.objects for select
+  using (bucket_id = 'community-media');
+
+-- ============================================================
+-- 15.6 社内SNS: 初期テーマ（全社共通・冪等）
+-- ============================================================
+insert into public.community_weekly_themes (company_id, title, description, starts_on, ends_on, is_active, sort_order)
+select null, '便利だったショートカット', '日々の業務で使っている時短ワザ・ショートカットを共有しよう。',
+       current_date, current_date + 6, true, 0
+where not exists (
+  select 1 from public.community_weekly_themes where company_id is null and title = '便利だったショートカット'
+);
+
+insert into public.community_weekly_themes (company_id, title, description, starts_on, ends_on, is_active, sort_order)
+select null, '失敗から学んだこと', '小さな失敗とそこから得た学びを気軽にシェアしよう。',
+       current_date + 7, current_date + 13, false, 1
+where not exists (
+  select 1 from public.community_weekly_themes where company_id is null and title = '失敗から学んだこと'
+);
+
+insert into public.community_weekly_themes (company_id, title, description, starts_on, ends_on, is_active, sort_order)
+select null, 'チーム紹介', '自分のチームの仕事・雰囲気・最近のトピックを紹介しよう。',
+       current_date + 14, current_date + 20, false, 2
+where not exists (
+  select 1 from public.community_weekly_themes where company_id is null and title = 'チーム紹介'
+);
+
+-- ============================================================
+-- 16. 社内報（ニュースレター）
+-- ============================================================
+-- 旧 029_newsletter.sql を統合。company_id = NULL は「全社共通」。
+-- 閲覧数は increment_newsletter_view() で加算し、newsletter_view_logs の
+-- 既読判定で同一ユーザーの二重計上を防ぐ。
+
+create table if not exists public.newsletter_issues (
+  id              uuid        primary key default gen_random_uuid(),
+  company_id      uuid        references public.companies(id) on delete cascade, -- NULL=全社共通
+  title           text        not null,
+  category        text        not null default 'MONTHLY'
+                              check (category in ('MONTHLY', 'FEATURE', 'PEOPLE', 'NOTICE')),
+  summary         text,
+  body            text        not null default '',
+  cover_image_url text,
+  image_urls      text[],
+  status          text        not null default 'DRAFT'
+                              check (status in ('DRAFT', 'PUBLISHED', 'SCHEDULED')),
+  published_at    timestamptz,
+  is_pickup       boolean     not null default false,
+  view_count      int         not null default 0,
+  created_by      uuid        references public.users(id),
+  created_at      timestamptz not null default now(),
+  updated_at      timestamptz not null default now()
+);
+
+create index if not exists newsletter_issues_company_idx
+  on public.newsletter_issues(company_id);
+create index if not exists newsletter_issues_status_pub_idx
+  on public.newsletter_issues(status, published_at desc);
+
+-- 閲覧ログ（既読判定 + 二重計上防止）
+create table if not exists public.newsletter_view_logs (
+  id         uuid        primary key default gen_random_uuid(),
+  issue_id   uuid        not null references public.newsletter_issues(id) on delete cascade,
+  user_id    uuid        references public.users(id),
+  viewed_at  timestamptz not null default now(),
+  unique (issue_id, user_id)
+);
+
+create index if not exists newsletter_view_logs_issue_idx
+  on public.newsletter_view_logs(issue_id);
+
+-- 閲覧数加算（既読なら加算しない。同時アクセスは unique 制約 + on conflict で吸収）
+create or replace function public.increment_newsletter_view(p_issue_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user     uuid := auth.uid();
+  v_inserted int;
+begin
+  if v_user is null then
+    return;
+  end if;
+  -- 既読なら加算しない（二重計上防止）。同時アクセスは unique 制約 + on conflict で吸収。
+  insert into public.newsletter_view_logs (issue_id, user_id)
+    values (p_issue_id, v_user)
+    on conflict (issue_id, user_id) do nothing;
+  get diagnostics v_inserted = row_count;
+  if v_inserted > 0 then
+    update public.newsletter_issues
+      set view_count = view_count + 1
+      where id = p_issue_id;
+  end if;
+end;
+$$;
+
+grant execute on function public.increment_newsletter_view(uuid) to authenticated;
+grant execute on function public.increment_newsletter_view(uuid) to service_role;
+
+drop trigger if exists trg_newsletter_issues_updated_at on public.newsletter_issues;
+create trigger trg_newsletter_issues_updated_at
+  before update on public.newsletter_issues
+  for each row execute function public.update_updated_at();
+
+alter table public.newsletter_issues    enable row level security;
+alter table public.newsletter_view_logs enable row level security;
+
+-- 閲覧: 公開済み(PUBLISHED) かつ スコープ内は全員閲覧可
+create policy "newsletter_issues: select published in scope" on public.newsletter_issues
+  for select using (
+    status = 'PUBLISHED'
+    and (company_id is null or company_id = any(public.get_user_company_ids()))
+  );
+
+-- 管理: ADMIN/MASTER_ADMIN はスコープ内を全操作（下書き閲覧含む）
+create policy "newsletter_issues: admin manage in scope" on public.newsletter_issues
+  for all
+  using (
+    public.get_user_role() in ('ADMIN', 'MASTER_ADMIN')
+    and (company_id is null or company_id = any(public.get_user_company_ids()))
+  )
+  with check (
+    public.get_user_role() in ('ADMIN', 'MASTER_ADMIN')
+    and (company_id is null or company_id = any(public.get_user_company_ids()))
+  );
+
+-- 閲覧ログ: 本人分 + ADMIN/MASTER_ADMIN
+-- （INSERT は increment_newsletter_view() が security definer で行うため直接権限は付与しない）
+create policy "newsletter_view_logs: select own or admin" on public.newsletter_view_logs
+  for select using (
+    user_id = auth.uid()
+    or public.get_user_role() in ('ADMIN', 'MASTER_ADMIN')
+  );
+
+grant all on public.newsletter_issues    to service_role;
+grant all on public.newsletter_view_logs to service_role;
+grant select, insert, update, delete on public.newsletter_issues to authenticated;
+grant select on public.newsletter_view_logs to authenticated;
+
+-- ============================================================
+-- 17. フェーズ2: 社員検索 / 案件オススメ
+-- ============================================================
+-- 旧 028_user_profiles_phase2.sql（user_profiles の追加列は Section 1 に内挿済み）と
+-- 旧 030_tags_themes_policies.sql を統合。
+
+-- ── user_profiles: 同じ会社の在籍メンバー同士は互いのプロフィールを閲覧可 ──
+-- （Section 11 の「本人のみ」「ADMIN 全件」ポリシーは温存し、これを追加する）
+create policy "user_profiles: select same company" on public.user_profiles
+  for select using (
+    exists (
+      select 1
+      from public.company_members cm
+      where cm.user_id = user_profiles.user_id
+        and cm.status = 'active'
+        and cm.company_id = any(public.get_user_company_ids())
+    )
+  );
+
+-- ── 社員検索ディレクトリ RPC ──
+-- public.users の RLS は本人 + ADMIN のみのため、同僚の氏名/アバターを直接 join できない。
+-- 自社の在籍メンバーに限り、検索表示に必要な最小列だけ返す。
+-- target を渡すと該当1名のみ（社員プロフィール詳細用）。
+create or replace function public.people_directory(target uuid default null)
+returns table (
+  user_id         uuid,
+  display_name    text,
+  avatar_url      text,
+  department_name text,
+  job_title       text,
+  bio             text,
+  skills          text[],
+  special_skills  text[],
+  hobbies         text[],
+  interest_themes text,
+  consult_topics  text,
+  availability    text
+)
+language sql
+security definer
+set search_path = public
+as $$
+  select
+    u.id,
+    u.display_name,
+    u.avatar_url,
+    d.name,
+    cm.job_title,
+    p.bio,
+    p.skills,
+    p.special_skills,
+    p.hobbies,
+    p.interest_themes,
+    p.consult_topics,
+    p.availability
+  from public.company_members cm
+  join public.users u on u.id = cm.user_id
+  left join public.departments d on d.id = cm.department_id
+  left join public.user_profiles p on p.user_id = cm.user_id
+  where cm.company_id = any(public.get_user_company_ids())
+    and cm.status = 'active'
+    and u.deleted_at is null
+    and (target is null or u.id = target)
+  order by u.display_name;
+$$;
+
+grant execute on function public.people_directory(uuid) to authenticated;
+grant execute on function public.people_directory(uuid) to service_role;
+
+-- ── post_tags: ADMIN も案件タグを作成・更新できるようにする ──
+-- 案件（OFFICIAL posts）にマッチング用タグを付与するため、Section 12 の
+-- 「MASTER_ADMIN のみ管理」に加えて ADMIN 用ポリシーを追加し、
+-- Section 5 の「authenticated は SELECT のみ」に INSERT/UPDATE を追加付与する。
+-- （テーブル権限が無いと RLS に到達する前に弾かれるため両方必要）
+create policy "post_tags: admin manage" on public.post_tags
+  for all
+  using  (public.get_user_role() in ('ADMIN', 'MASTER_ADMIN'))
+  with check (public.get_user_role() in ('ADMIN', 'MASTER_ADMIN'));
+
+grant insert, update on public.post_tags to authenticated;
