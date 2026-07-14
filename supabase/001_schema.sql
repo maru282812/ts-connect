@@ -2,8 +2,14 @@
 -- 001_schema.sql
 -- WorkMarket 本開発用 DB 初期化 SQL
 -- 空の Supabase プロジェクトに一発適用して完成形 DB を構築する。
+-- 既存 DB に再適用しても同じ状態に収束する（冪等）。何度流してもよい。
+--   - policy / trigger / constraint は drop if exists → create で貼り直す
+--   - 後から足した列・貼り替えた制約は Section 18 で収束させる
+--     （create table if not exists は既存テーブルに列を追加しないため）
 --
 -- 適用順: このファイル → 002_seed_dev.sql (任意)
+-- 注意: 002_seed_dev.sql は検証用ユーザー・投稿を投入する開発用シードである。
+--       実データの入った DB には流さないこと。
 --
 -- 統合済みパッチ:
 --   003_company_members_permissions.sql  (Section 5, 8)
@@ -202,6 +208,15 @@ create table if not exists public.user_profiles (
   updated_at           timestamptz not null default now()
 );
 
+-- 既存 DB 収束用: create table if not exists は既存テーブルに列を追加しないため、
+-- 上の定義に後から足した列はここでも明示的に追加する（新規 DB では no-op）。
+alter table public.user_profiles
+  add column if not exists bio             text,
+  add column if not exists special_skills  text[],
+  add column if not exists hobbies         text[],
+  add column if not exists interest_themes text,
+  add column if not exists consult_topics  text;
+
 -- ── user_settings ──────────────────────────────────────────
 -- ユーザーごとの通知・UI 設定。
 -- Phase 2: 設定画面で使用。
@@ -252,6 +267,7 @@ create table if not exists public.departments (
 create index if not exists departments_company_id_idx on public.departments(company_id);
 
 -- company_members.department_id FK を departments 作成後に付与
+alter table public.company_members drop constraint if exists company_members_department_id_fkey;
 alter table public.company_members
   add constraint company_members_department_id_fkey
   foreign key (department_id) references public.departments(id);
@@ -312,6 +328,7 @@ create table if not exists public.post_categories (
 );
 
 -- posts.category_id FK を post_categories 作成後に付与
+alter table public.posts drop constraint if exists posts_category_id_fkey;
 alter table public.posts
   add constraint posts_category_id_fkey
   foreign key (category_id) references public.post_categories(id);
@@ -590,6 +607,16 @@ create table if not exists public.notifications (
   read_at      timestamptz,
   created_at   timestamptz not null default now()
 );
+
+-- 既存 DB 収束用: type の許可値を貼り替える（'MENTION' 追加。新規 DB では同じ制約を貼り直すだけ）。
+alter table public.notifications drop constraint if exists notifications_type_check;
+alter table public.notifications add constraint notifications_type_check
+  check (type in (
+    'APPLICATION_RECEIVED', 'APPLICATION_STATUS_CHANGED',
+    'MESSAGE_RECEIVED', 'POST_CLOSED', 'INVITATION_RECEIVED',
+    'ANNOUNCEMENT', 'SYSTEM', 'POINT_GRANTED', 'REVIEW_RECEIVED',
+    'MENTION'
+  ));
 
 create index if not exists notifications_user_idx      on public.notifications(user_id);
 create index if not exists notifications_unread_idx    on public.notifications(user_id, is_read) where is_read = false;
@@ -1465,175 +1492,216 @@ $$ language plpgsql security definer;
 -- 3. Triggers
 -- ============================================================
 
+drop trigger if exists users_updated_at on public.users;
 create trigger users_updated_at
   before update on public.users
   for each row execute function public.update_updated_at();
 
+drop trigger if exists companies_updated_at on public.companies;
 create trigger companies_updated_at
   before update on public.companies
   for each row execute function public.update_updated_at();
 
+drop trigger if exists company_members_updated_at on public.company_members;
 create trigger company_members_updated_at
   before update on public.company_members
   for each row execute function public.update_updated_at();
 
+drop trigger if exists posts_updated_at on public.posts;
 create trigger posts_updated_at
   before update on public.posts
   for each row execute function public.update_updated_at();
 
+drop trigger if exists applications_updated_at on public.applications;
 create trigger applications_updated_at
   before update on public.applications
   for each row execute function public.update_updated_at();
 
 -- Part 2: ユーザー・会社系
+drop trigger if exists user_profiles_updated_at on public.user_profiles;
 create trigger user_profiles_updated_at
   before update on public.user_profiles
   for each row execute function public.update_updated_at();
 
+drop trigger if exists user_settings_updated_at on public.user_settings;
 create trigger user_settings_updated_at
   before update on public.user_settings
   for each row execute function public.update_updated_at();
 
+drop trigger if exists departments_updated_at on public.departments;
 create trigger departments_updated_at
   before update on public.departments
   for each row execute function public.update_updated_at();
 
+drop trigger if exists company_invitations_updated_at on public.company_invitations;
 create trigger company_invitations_updated_at
   before update on public.company_invitations
   for each row execute function public.update_updated_at();
 
+drop trigger if exists company_settings_updated_at on public.company_settings;
 create trigger company_settings_updated_at
   before update on public.company_settings
   for each row execute function public.update_updated_at();
 
 -- Part 3: 投稿・案件系
+drop trigger if exists post_categories_updated_at on public.post_categories;
 create trigger post_categories_updated_at
   before update on public.post_categories
   for each row execute function public.update_updated_at();
 
+drop trigger if exists featured_posts_updated_at on public.featured_posts;
 create trigger featured_posts_updated_at
   before update on public.featured_posts
   for each row execute function public.update_updated_at();
 
+drop trigger if exists post_templates_updated_at on public.post_templates;
 create trigger post_templates_updated_at
   before update on public.post_templates
   for each row execute function public.update_updated_at();
 
+drop trigger if exists post_reports_updated_at on public.post_reports;
 create trigger post_reports_updated_at
   before update on public.post_reports
   for each row execute function public.update_updated_at();
 
 -- Part 4: 応募・メッセージ系
+drop trigger if exists application_messages_updated_at on public.application_messages;
 create trigger application_messages_updated_at
   before update on public.application_messages
   for each row execute function public.update_updated_at();
 
+drop trigger if exists application_limits_updated_at on public.application_limits;
 create trigger application_limits_updated_at
   before update on public.application_limits
   for each row execute function public.update_updated_at();
 
+drop trigger if exists inquiries_updated_at on public.inquiries;
 create trigger inquiries_updated_at
   before update on public.inquiries
   for each row execute function public.update_updated_at();
 
 -- Part 5: 通知・メール系
+drop trigger if exists notification_settings_updated_at on public.notification_settings;
 create trigger notification_settings_updated_at
   before update on public.notification_settings
   for each row execute function public.update_updated_at();
 
+drop trigger if exists email_delivery_logs_updated_at on public.email_delivery_logs;
 create trigger email_delivery_logs_updated_at
   before update on public.email_delivery_logs
   for each row execute function public.update_updated_at();
 
+drop trigger if exists email_templates_updated_at on public.email_templates;
 create trigger email_templates_updated_at
   before update on public.email_templates
   for each row execute function public.update_updated_at();
 
 -- Part 6: 管理・運営系
+drop trigger if exists admin_notes_updated_at on public.admin_notes;
 create trigger admin_notes_updated_at
   before update on public.admin_notes
   for each row execute function public.update_updated_at();
 
+drop trigger if exists announcements_updated_at on public.announcements;
 create trigger announcements_updated_at
   before update on public.announcements
   for each row execute function public.update_updated_at();
 
+drop trigger if exists system_settings_updated_at on public.system_settings;
 create trigger system_settings_updated_at
   before update on public.system_settings
   for each row execute function public.update_updated_at();
 
+drop trigger if exists feature_flags_updated_at on public.feature_flags;
 create trigger feature_flags_updated_at
   before update on public.feature_flags
   for each row execute function public.update_updated_at();
 
 -- Part 7: 契約・評価系
+drop trigger if exists contracts_updated_at on public.contracts;
 create trigger contracts_updated_at
   before update on public.contracts
   for each row execute function public.update_updated_at();
 
+drop trigger if exists deliverables_updated_at on public.deliverables;
 create trigger deliverables_updated_at
   before update on public.deliverables
   for each row execute function public.update_updated_at();
 
+drop trigger if exists disputes_updated_at on public.disputes;
 create trigger disputes_updated_at
   before update on public.disputes
   for each row execute function public.update_updated_at();
 
+drop trigger if exists reviews_updated_at on public.reviews;
 create trigger reviews_updated_at
   before update on public.reviews
   for each row execute function public.update_updated_at();
 
+drop trigger if exists review_replies_updated_at on public.review_replies;
 create trigger review_replies_updated_at
   before update on public.review_replies
   for each row execute function public.update_updated_at();
 
+drop trigger if exists user_scores_updated_at on public.user_scores;
 create trigger user_scores_updated_at
   before update on public.user_scores
   for each row execute function public.update_updated_at();
 
+drop trigger if exists company_scores_updated_at on public.company_scores;
 create trigger company_scores_updated_at
   before update on public.company_scores
   for each row execute function public.update_updated_at();
 
 -- Part 8: ポイント系
+drop trigger if exists wallets_updated_at on public.wallets;
 create trigger wallets_updated_at
   before update on public.wallets
   for each row execute function public.update_updated_at();
 
+drop trigger if exists point_rules_updated_at on public.point_rules;
 create trigger point_rules_updated_at
   before update on public.point_rules
   for each row execute function public.update_updated_at();
 
 -- Part 9: EC系
+drop trigger if exists products_updated_at on public.products;
 create trigger products_updated_at
   before update on public.products
   for each row execute function public.update_updated_at();
 
+drop trigger if exists carts_updated_at on public.carts;
 create trigger carts_updated_at
   before update on public.carts
   for each row execute function public.update_updated_at();
 
+drop trigger if exists cart_items_updated_at on public.cart_items;
 create trigger cart_items_updated_at
   before update on public.cart_items
   for each row execute function public.update_updated_at();
 
+drop trigger if exists orders_updated_at on public.orders;
 create trigger orders_updated_at
   before update on public.orders
   for each row execute function public.update_updated_at();
 
+drop trigger if exists payments_updated_at on public.payments;
 create trigger payments_updated_at
   before update on public.payments
   for each row execute function public.update_updated_at();
 
+drop trigger if exists coupons_updated_at on public.coupons;
 create trigger coupons_updated_at
   before update on public.coupons
   for each row execute function public.update_updated_at();
 
+drop trigger if exists invoices_updated_at on public.invoices;
 create trigger invoices_updated_at
   before update on public.invoices
   for each row execute function public.update_updated_at();
 
 -- auth.users 作成時に public.users を自動同期
+drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function public.handle_new_user();
@@ -2027,14 +2095,17 @@ GRANT INSERT ON public.conversion_events          TO authenticated;
 -- ============================================================
 
 -- 自分のレコードを参照可能
+drop policy if exists "users: select own" on public.users;
 create policy "users: select own" on public.users
   for select using (id = auth.uid());
 
 -- ADMIN / MASTER_ADMIN は全件参照可能
+drop policy if exists "users: admin or master select all" on public.users;
 create policy "users: admin or master select all" on public.users
   for select using (public.get_user_role() in ('ADMIN', 'MASTER_ADMIN'));
 
 -- 自分のレコードのみ更新可能
+drop policy if exists "users: update own" on public.users;
 create policy "users: update own" on public.users
   for update using (id = auth.uid());
 
@@ -2049,14 +2120,17 @@ create policy "users: update own" on public.users
 -- ============================================================
 
 -- 認証済み全ユーザーが会社名を参照可能（UI 表示に必要）
+drop policy if exists "companies: select all authenticated" on public.companies;
 create policy "companies: select all authenticated" on public.companies
   for select using (auth.role() = 'authenticated');
 
 -- ADMIN / MASTER_ADMIN: 会社を作成可能
+drop policy if exists "companies: admin or master insert" on public.companies;
 create policy "companies: admin or master insert" on public.companies
   for insert with check (public.get_user_role() in ('ADMIN', 'MASTER_ADMIN'));
 
 -- ADMIN / MASTER_ADMIN: 会社情報を更新可能
+drop policy if exists "companies: admin or master update" on public.companies;
 create policy "companies: admin or master update" on public.companies
   for update
   using  (public.get_user_role() in ('ADMIN', 'MASTER_ADMIN'))
@@ -2071,14 +2145,17 @@ create policy "companies: admin or master update" on public.companies
 -- ============================================================
 
 -- 自分の所属レコードを参照可能（全ロール共通）
+drop policy if exists "company_members: select own" on public.company_members;
 create policy "company_members: select own" on public.company_members
   for select using (user_id = auth.uid());
 
 -- MASTER_ADMIN: 全 company_members を参照可能
+drop policy if exists "company_members: master_admin select all" on public.company_members;
 create policy "company_members: master_admin select all" on public.company_members
   for select using (public.get_user_role() = 'MASTER_ADMIN');
 
 -- ADMIN: active 所属会社の company_members を参照可能
+drop policy if exists "company_members: admin select own company" on public.company_members;
 create policy "company_members: admin select own company" on public.company_members
   for select using (
     public.get_user_role() = 'ADMIN'
@@ -2086,10 +2163,12 @@ create policy "company_members: admin select own company" on public.company_memb
   );
 
 -- 全認証済みユーザー: 自分の所属を追加可能（マイページでの会社設定に必要）
+drop policy if exists "company_members: user insert own" on public.company_members;
 create policy "company_members: user insert own" on public.company_members
   for insert with check (user_id = auth.uid());
 
 -- 全認証済みユーザー: 自分の所属を削除可能（マイページでの会社変更に必要）
+drop policy if exists "company_members: user delete own" on public.company_members;
 create policy "company_members: user delete own" on public.company_members
   for delete using (user_id = auth.uid());
 
@@ -2113,6 +2192,7 @@ create policy "company_members: user delete own" on public.company_members
 -- ============================================================
 
 -- USER: OPEN / IN_PROGRESS の投稿を閲覧可能（全社）
+drop policy if exists "posts: user select open" on public.posts;
 create policy "posts: user select open" on public.posts
   for select using (
     public.get_user_role() = 'USER'
@@ -2120,6 +2200,7 @@ create policy "posts: user select open" on public.posts
   );
 
 -- USER: 自分の CASUAL 投稿はステータスを問わず参照可能
+drop policy if exists "posts: user select own casual" on public.posts;
 create policy "posts: user select own casual" on public.posts
   for select using (
     public.get_user_role() = 'USER'
@@ -2128,6 +2209,7 @@ create policy "posts: user select own casual" on public.posts
   );
 
 -- USER: CASUAL 投稿のみ作成可能
+drop policy if exists "posts: user insert casual" on public.posts;
 create policy "posts: user insert casual" on public.posts
   for insert with check (
     public.get_user_role() = 'USER'
@@ -2136,6 +2218,7 @@ create policy "posts: user insert casual" on public.posts
   );
 
 -- USER: 自分の CASUAL 投稿のみ更新可能
+drop policy if exists "posts: user update own casual" on public.posts;
 create policy "posts: user update own casual" on public.posts
   for update using (
     public.get_user_role() = 'USER'
@@ -2144,6 +2227,7 @@ create policy "posts: user update own casual" on public.posts
   );
 
 -- MASTER_ADMIN: 全件操作可能（SELECT / INSERT / UPDATE）
+drop policy if exists "posts: master_admin all" on public.posts;
 create policy "posts: master_admin all" on public.posts
   for all
   using  (public.get_user_role() = 'MASTER_ADMIN')
@@ -2152,6 +2236,7 @@ create policy "posts: master_admin all" on public.posts
 -- ADMIN SELECT:
 --   (A) OPEN / IN_PROGRESS なら全社分閲覧可（案件一覧）
 --   (B) 自社の投稿はステータスを問わず閲覧可（投稿管理）
+drop policy if exists "posts: admin select" on public.posts;
 create policy "posts: admin select" on public.posts
   for select using (
     public.get_user_role() = 'ADMIN'
@@ -2162,6 +2247,7 @@ create policy "posts: admin select" on public.posts
   );
 
 -- ADMIN INSERT: active 所属会社かつ自分が created_by_user_id
+drop policy if exists "posts: admin insert own company" on public.posts;
 create policy "posts: admin insert own company" on public.posts
   for insert with check (
     public.get_user_role() = 'ADMIN'
@@ -2170,6 +2256,7 @@ create policy "posts: admin insert own company" on public.posts
   );
 
 -- ADMIN UPDATE: 自分が投稿した（かつ active 所属会社）のみ
+drop policy if exists "posts: admin update own" on public.posts;
 create policy "posts: admin update own" on public.posts
   for update
   using (
@@ -2201,11 +2288,13 @@ create policy "posts: admin update own" on public.posts
 -- ============================================================
 
 -- 応募者: 自分の応募を参照可能
+drop policy if exists "applications: applicant select own" on public.applications;
 create policy "applications: applicant select own" on public.applications
   for select using (applicant_user_id = auth.uid());
 
 -- 投稿オーナー: 自分の投稿に届いた応募を参照可能
 -- （CASUAL 投稿を持つ USER が受信した応募を確認できるようにする）
+drop policy if exists "applications: post owner select" on public.applications;
 create policy "applications: post owner select" on public.applications
   for select using (
     post_id in (
@@ -2215,16 +2304,19 @@ create policy "applications: post owner select" on public.applications
   );
 
 -- 応募作成: 自分名義のみ可能（ログインユーザー本人）
+drop policy if exists "applications: applicant insert" on public.applications;
 create policy "applications: applicant insert" on public.applications
   for insert with check (applicant_user_id = auth.uid());
 
 -- MASTER_ADMIN: 全件操作可能（SELECT / INSERT / UPDATE）
+drop policy if exists "applications: master_admin all" on public.applications;
 create policy "applications: master_admin all" on public.applications
   for all
   using  (public.get_user_role() = 'MASTER_ADMIN')
   with check (public.get_user_role() = 'MASTER_ADMIN');
 
 -- ADMIN SELECT: active 所属会社の投稿への応募を閲覧可能
+drop policy if exists "applications: admin select own company" on public.applications;
 create policy "applications: admin select own company" on public.applications
   for select using (
     public.get_user_role() = 'ADMIN'
@@ -2235,6 +2327,7 @@ create policy "applications: admin select own company" on public.applications
   );
 
 -- ADMIN UPDATE: active 所属会社の投稿への応募ステータス変更可能
+drop policy if exists "applications: admin update own company" on public.applications;
 create policy "applications: admin update own company" on public.applications
   for update
   using (
@@ -2260,36 +2353,45 @@ create policy "applications: admin update own company" on public.applications
 -- SELECT: 自分 / ADMIN・MASTER_ADMIN は全件
 -- INSERT/UPDATE: 自分のみ
 
+drop policy if exists "user_profiles: select own" on public.user_profiles;
 create policy "user_profiles: select own" on public.user_profiles
   for select using (user_id = auth.uid());
 
+drop policy if exists "user_profiles: admin or master select all" on public.user_profiles;
 create policy "user_profiles: admin or master select all" on public.user_profiles
   for select using (public.get_user_role() in ('ADMIN', 'MASTER_ADMIN'));
 
+drop policy if exists "user_profiles: insert own" on public.user_profiles;
 create policy "user_profiles: insert own" on public.user_profiles
   for insert with check (user_id = auth.uid());
 
+drop policy if exists "user_profiles: update own" on public.user_profiles;
 create policy "user_profiles: update own" on public.user_profiles
   for update using (user_id = auth.uid());
 
 -- ── user_settings ──────────────────────────────────────────
 -- SELECT/INSERT/UPDATE: 自分のみ
 
+drop policy if exists "user_settings: select own" on public.user_settings;
 create policy "user_settings: select own" on public.user_settings
   for select using (user_id = auth.uid());
 
+drop policy if exists "user_settings: insert own" on public.user_settings;
 create policy "user_settings: insert own" on public.user_settings
   for insert with check (user_id = auth.uid());
 
+drop policy if exists "user_settings: update own" on public.user_settings;
 create policy "user_settings: update own" on public.user_settings
   for update using (user_id = auth.uid());
 
 -- ── user_status_histories ──────────────────────────────────
 -- SELECT: 自分 / MASTER_ADMIN は全件
 
+drop policy if exists "user_status_histories: select own" on public.user_status_histories;
 create policy "user_status_histories: select own" on public.user_status_histories
   for select using (user_id = auth.uid());
 
+drop policy if exists "user_status_histories: master_admin select all" on public.user_status_histories;
 create policy "user_status_histories: master_admin select all" on public.user_status_histories
   for select using (public.get_user_role() = 'MASTER_ADMIN');
 
@@ -2297,18 +2399,22 @@ create policy "user_status_histories: master_admin select all" on public.user_st
 -- SELECT: 所属会社のメンバー全員
 -- INSERT/UPDATE: 所属会社の ADMIN / MASTER_ADMIN
 
+drop policy if exists "departments: select company members" on public.departments;
 create policy "departments: select company members" on public.departments
   for select using (company_id = any(public.get_user_company_ids()));
 
+drop policy if exists "departments: master_admin select all" on public.departments;
 create policy "departments: master_admin select all" on public.departments
   for select using (public.get_user_role() = 'MASTER_ADMIN');
 
+drop policy if exists "departments: admin insert own company" on public.departments;
 create policy "departments: admin insert own company" on public.departments
   for insert with check (
     public.get_user_role() in ('ADMIN', 'MASTER_ADMIN')
     and company_id = any(public.get_user_company_ids())
   );
 
+drop policy if exists "departments: admin update own company" on public.departments;
 create policy "departments: admin update own company" on public.departments
   for update
   using (
@@ -2320,6 +2426,7 @@ create policy "departments: admin update own company" on public.departments
     and company_id = any(public.get_user_company_ids())
   );
 
+drop policy if exists "departments: master_admin all" on public.departments;
 create policy "departments: master_admin all" on public.departments
   for all
   using  (public.get_user_role() = 'MASTER_ADMIN')
@@ -2328,21 +2435,25 @@ create policy "departments: master_admin all" on public.departments
 -- ── company_invitations ────────────────────────────────────
 -- SELECT/INSERT/UPDATE: 所属会社の ADMIN / MASTER_ADMIN
 
+drop policy if exists "company_invitations: admin select own company" on public.company_invitations;
 create policy "company_invitations: admin select own company" on public.company_invitations
   for select using (
     public.get_user_role() in ('ADMIN', 'MASTER_ADMIN')
     and company_id = any(public.get_user_company_ids())
   );
 
+drop policy if exists "company_invitations: master_admin select all" on public.company_invitations;
 create policy "company_invitations: master_admin select all" on public.company_invitations
   for select using (public.get_user_role() = 'MASTER_ADMIN');
 
+drop policy if exists "company_invitations: admin insert own company" on public.company_invitations;
 create policy "company_invitations: admin insert own company" on public.company_invitations
   for insert with check (
     public.get_user_role() in ('ADMIN', 'MASTER_ADMIN')
     and company_id = any(public.get_user_company_ids())
   );
 
+drop policy if exists "company_invitations: admin update own company" on public.company_invitations;
 create policy "company_invitations: admin update own company" on public.company_invitations
   for update
   using (
@@ -2358,18 +2469,22 @@ create policy "company_invitations: admin update own company" on public.company_
 -- SELECT: 所属会社のメンバー全員
 -- INSERT/UPDATE: 所属会社の ADMIN / MASTER_ADMIN
 
+drop policy if exists "company_settings: select company members" on public.company_settings;
 create policy "company_settings: select company members" on public.company_settings
   for select using (company_id = any(public.get_user_company_ids()));
 
+drop policy if exists "company_settings: master_admin select all" on public.company_settings;
 create policy "company_settings: master_admin select all" on public.company_settings
   for select using (public.get_user_role() = 'MASTER_ADMIN');
 
+drop policy if exists "company_settings: admin insert own company" on public.company_settings;
 create policy "company_settings: admin insert own company" on public.company_settings
   for insert with check (
     public.get_user_role() in ('ADMIN', 'MASTER_ADMIN')
     and company_id = any(public.get_user_company_ids())
   );
 
+drop policy if exists "company_settings: admin update own company" on public.company_settings;
 create policy "company_settings: admin update own company" on public.company_settings
   for update
   using (
@@ -2388,9 +2503,11 @@ create policy "company_settings: admin update own company" on public.company_set
 -- ── post_categories ────────────────────────────────────────
 -- SELECT: 全認証済み / INSERT・UPDATE: MASTER_ADMIN のみ
 
+drop policy if exists "post_categories: select all authenticated" on public.post_categories;
 create policy "post_categories: select all authenticated" on public.post_categories
   for select using (auth.role() = 'authenticated');
 
+drop policy if exists "post_categories: master_admin all" on public.post_categories;
 create policy "post_categories: master_admin all" on public.post_categories
   for all
   using  (public.get_user_role() = 'MASTER_ADMIN')
@@ -2399,9 +2516,11 @@ create policy "post_categories: master_admin all" on public.post_categories
 -- ── post_tags ──────────────────────────────────────────────
 -- SELECT: 全認証済み / INSERT: MASTER_ADMIN のみ
 
+drop policy if exists "post_tags: select all authenticated" on public.post_tags;
 create policy "post_tags: select all authenticated" on public.post_tags
   for select using (auth.role() = 'authenticated');
 
+drop policy if exists "post_tags: master_admin all" on public.post_tags;
 create policy "post_tags: master_admin all" on public.post_tags
   for all
   using  (public.get_user_role() = 'MASTER_ADMIN')
@@ -2411,9 +2530,11 @@ create policy "post_tags: master_admin all" on public.post_tags
 -- SELECT: 全認証済み（投稿に紐付く公開コンテンツ）
 -- INSERT: 投稿の作成者 or 所属会社の ADMIN / MASTER_ADMIN
 
+drop policy if exists "post_files: select all authenticated" on public.post_files;
 create policy "post_files: select all authenticated" on public.post_files
   for select using (auth.role() = 'authenticated');
 
+drop policy if exists "post_files: insert post owner or admin" on public.post_files;
 create policy "post_files: insert post owner or admin" on public.post_files
   for insert with check (
     uploaded_by = auth.uid()
@@ -2429,9 +2550,11 @@ create policy "post_files: insert post owner or admin" on public.post_files
 -- SELECT: 全認証済み
 -- INSERT/DELETE: 投稿の作成者 or 所属会社の ADMIN / MASTER_ADMIN
 
+drop policy if exists "post_tag_relations: select all authenticated" on public.post_tag_relations;
 create policy "post_tag_relations: select all authenticated" on public.post_tag_relations
   for select using (auth.role() = 'authenticated');
 
+drop policy if exists "post_tag_relations: insert by post owner or admin" on public.post_tag_relations;
 create policy "post_tag_relations: insert by post owner or admin" on public.post_tag_relations
   for insert with check (
     public.get_user_role() in ('ADMIN', 'MASTER_ADMIN')
@@ -2440,6 +2563,7 @@ create policy "post_tag_relations: insert by post owner or admin" on public.post
     )
   );
 
+drop policy if exists "post_tag_relations: delete by post owner or admin" on public.post_tag_relations;
 create policy "post_tag_relations: delete by post owner or admin" on public.post_tag_relations
   for delete using (
     public.get_user_role() in ('ADMIN', 'MASTER_ADMIN')
@@ -2451,6 +2575,7 @@ create policy "post_tag_relations: delete by post owner or admin" on public.post
 -- ── post_status_histories ──────────────────────────────────
 -- SELECT: 投稿の作成者 / 所属会社 ADMIN / MASTER_ADMIN
 
+drop policy if exists "post_status_histories: select post owner" on public.post_status_histories;
 create policy "post_status_histories: select post owner" on public.post_status_histories
   for select using (
     post_id in (
@@ -2458,6 +2583,7 @@ create policy "post_status_histories: select post owner" on public.post_status_h
     )
   );
 
+drop policy if exists "post_status_histories: admin select own company" on public.post_status_histories;
 create policy "post_status_histories: admin select own company" on public.post_status_histories
   for select using (
     public.get_user_role() = 'ADMIN'
@@ -2467,6 +2593,7 @@ create policy "post_status_histories: admin select own company" on public.post_s
     )
   );
 
+drop policy if exists "post_status_histories: master_admin all" on public.post_status_histories;
 create policy "post_status_histories: master_admin all" on public.post_status_histories
   for all
   using  (public.get_user_role() = 'MASTER_ADMIN')
@@ -2475,9 +2602,11 @@ create policy "post_status_histories: master_admin all" on public.post_status_hi
 -- ── featured_posts ─────────────────────────────────────────
 -- SELECT: 全認証済み / INSERT・UPDATE・DELETE: MASTER_ADMIN のみ
 
+drop policy if exists "featured_posts: select all authenticated" on public.featured_posts;
 create policy "featured_posts: select all authenticated" on public.featured_posts
   for select using (auth.role() = 'authenticated');
 
+drop policy if exists "featured_posts: master_admin all" on public.featured_posts;
 create policy "featured_posts: master_admin all" on public.featured_posts
   for all
   using  (public.get_user_role() = 'MASTER_ADMIN')
@@ -2487,6 +2616,7 @@ create policy "featured_posts: master_admin all" on public.featured_posts
 -- SELECT: 同じ会社の ADMIN（is_shared=true）or 自分が作成したもの
 -- INSERT/UPDATE: 所属会社の ADMIN / MASTER_ADMIN
 
+drop policy if exists "post_templates: select own or shared" on public.post_templates;
 create policy "post_templates: select own or shared" on public.post_templates
   for select using (
     created_by_user_id = auth.uid()
@@ -2496,9 +2626,11 @@ create policy "post_templates: select own or shared" on public.post_templates
     )
   );
 
+drop policy if exists "post_templates: master_admin select all" on public.post_templates;
 create policy "post_templates: master_admin select all" on public.post_templates
   for select using (public.get_user_role() = 'MASTER_ADMIN');
 
+drop policy if exists "post_templates: admin insert own company" on public.post_templates;
 create policy "post_templates: admin insert own company" on public.post_templates
   for insert with check (
     public.get_user_role() in ('ADMIN', 'MASTER_ADMIN')
@@ -2506,6 +2638,7 @@ create policy "post_templates: admin insert own company" on public.post_template
     and created_by_user_id = auth.uid()
   );
 
+drop policy if exists "post_templates: admin update own company" on public.post_templates;
 create policy "post_templates: admin update own company" on public.post_templates
   for update
   using (
@@ -2520,12 +2653,15 @@ create policy "post_templates: admin update own company" on public.post_template
 -- ── post_bookmarks ─────────────────────────────────────────
 -- SELECT / INSERT / DELETE: 自分のみ
 
+drop policy if exists "post_bookmarks: select own" on public.post_bookmarks;
 create policy "post_bookmarks: select own" on public.post_bookmarks
   for select using (user_id = auth.uid());
 
+drop policy if exists "post_bookmarks: insert own" on public.post_bookmarks;
 create policy "post_bookmarks: insert own" on public.post_bookmarks
   for insert with check (user_id = auth.uid());
 
+drop policy if exists "post_bookmarks: delete own" on public.post_bookmarks;
 create policy "post_bookmarks: delete own" on public.post_bookmarks
   for delete using (user_id = auth.uid());
 
@@ -2533,9 +2669,11 @@ create policy "post_bookmarks: delete own" on public.post_bookmarks
 -- INSERT: 全認証済み（閲覧ログの記録）
 -- SELECT: MASTER_ADMIN のみ（分析用）
 
+drop policy if exists "post_view_logs: insert authenticated" on public.post_view_logs;
 create policy "post_view_logs: insert authenticated" on public.post_view_logs
   for insert with check (auth.role() = 'authenticated');
 
+drop policy if exists "post_view_logs: master_admin select all" on public.post_view_logs;
 create policy "post_view_logs: master_admin select all" on public.post_view_logs
   for select using (public.get_user_role() = 'MASTER_ADMIN');
 
@@ -2544,15 +2682,19 @@ create policy "post_view_logs: master_admin select all" on public.post_view_logs
 -- SELECT: 自分の通報 / ADMIN・MASTER_ADMIN は全件
 -- UPDATE: ADMIN / MASTER_ADMIN（ステータス更新）
 
+drop policy if exists "post_reports: insert own" on public.post_reports;
 create policy "post_reports: insert own" on public.post_reports
   for insert with check (reported_by = auth.uid());
 
+drop policy if exists "post_reports: select own" on public.post_reports;
 create policy "post_reports: select own" on public.post_reports
   for select using (reported_by = auth.uid());
 
+drop policy if exists "post_reports: admin or master select all" on public.post_reports;
 create policy "post_reports: admin or master select all" on public.post_reports
   for select using (public.get_user_role() in ('ADMIN', 'MASTER_ADMIN'));
 
+drop policy if exists "post_reports: admin or master update" on public.post_reports;
 create policy "post_reports: admin or master update" on public.post_reports
   for update
   using  (public.get_user_role() in ('ADMIN', 'MASTER_ADMIN'))
@@ -2564,6 +2706,7 @@ create policy "post_reports: admin or master update" on public.post_reports
 
 -- ── application_messages ────────────────────────────────────
 -- 応募に関係する当事者 (応募者・投稿オーナー会社のADMIN・MASTER_ADMIN) のみ参照・送信可
+drop policy if exists "application_messages: 当事者SELECT" on public.application_messages;
 create policy "application_messages: 当事者SELECT"
   on public.application_messages for select
   using (
@@ -2582,6 +2725,7 @@ create policy "application_messages: 当事者SELECT"
     or public.get_user_role() = 'MASTER_ADMIN'
   );
 
+drop policy if exists "application_messages: 当事者INSERT" on public.application_messages;
 create policy "application_messages: 当事者INSERT"
   on public.application_messages for insert
   with check (
@@ -2602,6 +2746,7 @@ create policy "application_messages: 当事者INSERT"
     )
   );
 
+drop policy if exists "application_messages: 既読UPDATE" on public.application_messages;
 create policy "application_messages: 既読UPDATE"
   on public.application_messages for update
   using (
@@ -2621,6 +2766,7 @@ create policy "application_messages: 既読UPDATE"
   );
 
 -- ── application_status_histories ────────────────────────────
+drop policy if exists "application_status_histories: 当事者SELECT" on public.application_status_histories;
 create policy "application_status_histories: 当事者SELECT"
   on public.application_status_histories for select
   using (
@@ -2638,21 +2784,25 @@ create policy "application_status_histories: 当事者SELECT"
     or public.get_user_role() = 'MASTER_ADMIN'
   );
 
+drop policy if exists "application_status_histories: 当事者INSERT" on public.application_status_histories;
 create policy "application_status_histories: 当事者INSERT"
   on public.application_status_histories for insert
   with check (public.get_user_role() in ('ADMIN', 'MASTER_ADMIN'));
 
 -- ── application_limits ──────────────────────────────────────
+drop policy if exists "application_limits: ADMIN以上SELECT" on public.application_limits;
 create policy "application_limits: ADMIN以上SELECT"
   on public.application_limits for select
   using (public.get_user_role() in ('ADMIN', 'MASTER_ADMIN'));
 
+drop policy if exists "application_limits: MASTER_ADMIN全操作" on public.application_limits;
 create policy "application_limits: MASTER_ADMIN全操作"
   on public.application_limits for all
   using (public.get_user_role() = 'MASTER_ADMIN')
   with check (public.get_user_role() = 'MASTER_ADMIN');
 
 -- ── application_cancellations ────────────────────────────────
+drop policy if exists "application_cancellations: 当事者SELECT" on public.application_cancellations;
 create policy "application_cancellations: 当事者SELECT"
   on public.application_cancellations for select
   using (
@@ -2670,6 +2820,7 @@ create policy "application_cancellations: 当事者SELECT"
     or public.get_user_role() = 'MASTER_ADMIN'
   );
 
+drop policy if exists "application_cancellations: 申請者INSERT" on public.application_cancellations;
 create policy "application_cancellations: 申請者INSERT"
   on public.application_cancellations for insert
   with check (
@@ -2677,6 +2828,7 @@ create policy "application_cancellations: 申請者INSERT"
   );
 
 -- ── inquiries ────────────────────────────────────────────────
+drop policy if exists "inquiries: 本人またはADMIN SELECT" on public.inquiries;
 create policy "inquiries: 本人またはADMIN SELECT"
   on public.inquiries for select
   using (
@@ -2684,16 +2836,19 @@ create policy "inquiries: 本人またはADMIN SELECT"
     or public.get_user_role() in ('ADMIN', 'MASTER_ADMIN')
   );
 
+drop policy if exists "inquiries: 認証ユーザーINSERT" on public.inquiries;
 create policy "inquiries: 認証ユーザーINSERT"
   on public.inquiries for insert
   with check (sender_user_id = auth.uid());
 
+drop policy if exists "inquiries: ADMIN UPDATE" on public.inquiries;
 create policy "inquiries: ADMIN UPDATE"
   on public.inquiries for update
   using (public.get_user_role() in ('ADMIN', 'MASTER_ADMIN'))
   with check (public.get_user_role() in ('ADMIN', 'MASTER_ADMIN'));
 
 -- ── inquiry_messages ─────────────────────────────────────────
+drop policy if exists "inquiry_messages: 本人またはADMIN SELECT" on public.inquiry_messages;
 create policy "inquiry_messages: 本人またはADMIN SELECT"
   on public.inquiry_messages for select
   using (
@@ -2704,6 +2859,7 @@ create policy "inquiry_messages: 本人またはADMIN SELECT"
     )
   );
 
+drop policy if exists "inquiry_messages: 当事者INSERT" on public.inquiry_messages;
 create policy "inquiry_messages: 当事者INSERT"
   on public.inquiry_messages for insert
   with check (
@@ -2716,59 +2872,71 @@ create policy "inquiry_messages: 当事者INSERT"
   );
 
 -- ── notifications ────────────────────────────────────────────
+drop policy if exists "notifications: 本人SELECT" on public.notifications;
 create policy "notifications: 本人SELECT"
   on public.notifications for select
   using (user_id = auth.uid() or public.get_user_role() = 'MASTER_ADMIN');
 
+drop policy if exists "notifications: 本人UPDATE(既読)" on public.notifications;
 create policy "notifications: 本人UPDATE(既読)"
   on public.notifications for update
   using (user_id = auth.uid())
   with check (user_id = auth.uid());
 
 -- ── notification_settings ────────────────────────────────────
+drop policy if exists "notification_settings: 本人SELECT" on public.notification_settings;
 create policy "notification_settings: 本人SELECT"
   on public.notification_settings for select
   using (user_id = auth.uid());
 
+drop policy if exists "notification_settings: 本人INSERT" on public.notification_settings;
 create policy "notification_settings: 本人INSERT"
   on public.notification_settings for insert
   with check (user_id = auth.uid());
 
+drop policy if exists "notification_settings: 本人UPDATE" on public.notification_settings;
 create policy "notification_settings: 本人UPDATE"
   on public.notification_settings for update
   using  (user_id = auth.uid())
   with check (user_id = auth.uid());
 
 -- ── email_delivery_logs ──────────────────────────────────────
+drop policy if exists "email_delivery_logs: MASTER_ADMIN SELECT" on public.email_delivery_logs;
 create policy "email_delivery_logs: MASTER_ADMIN SELECT"
   on public.email_delivery_logs for select
   using (public.get_user_role() = 'MASTER_ADMIN');
 
 -- ── email_templates ──────────────────────────────────────────
+drop policy if exists "email_templates: ADMIN以上SELECT" on public.email_templates;
 create policy "email_templates: ADMIN以上SELECT"
   on public.email_templates for select
   using (public.get_user_role() in ('ADMIN', 'MASTER_ADMIN'));
 
+drop policy if exists "email_templates: MASTER_ADMIN全操作" on public.email_templates;
 create policy "email_templates: MASTER_ADMIN全操作"
   on public.email_templates for all
   using (public.get_user_role() = 'MASTER_ADMIN')
   with check (public.get_user_role() = 'MASTER_ADMIN');
 
 -- ── notification_events ──────────────────────────────────────
+drop policy if exists "notification_events: MASTER_ADMIN SELECT" on public.notification_events;
 create policy "notification_events: MASTER_ADMIN SELECT"
   on public.notification_events for select
   using (public.get_user_role() = 'MASTER_ADMIN');
 
 -- ── admin_audit_logs ─────────────────────────────────────────
+drop policy if exists "admin_audit_logs: MASTER_ADMIN SELECT" on public.admin_audit_logs;
 create policy "admin_audit_logs: MASTER_ADMIN SELECT"
   on public.admin_audit_logs for select
   using (public.get_user_role() = 'MASTER_ADMIN');
 
 -- ── admin_notes ──────────────────────────────────────────────
+drop policy if exists "admin_notes: ADMIN以上SELECT" on public.admin_notes;
 create policy "admin_notes: ADMIN以上SELECT"
   on public.admin_notes for select
   using (public.get_user_role() in ('ADMIN', 'MASTER_ADMIN'));
 
+drop policy if exists "admin_notes: ADMIN以上INSERT" on public.admin_notes;
 create policy "admin_notes: ADMIN以上INSERT"
   on public.admin_notes for insert
   with check (
@@ -2776,16 +2944,19 @@ create policy "admin_notes: ADMIN以上INSERT"
     and public.get_user_role() in ('ADMIN', 'MASTER_ADMIN')
   );
 
+drop policy if exists "admin_notes: 作成者UPDATE" on public.admin_notes;
 create policy "admin_notes: 作成者UPDATE"
   on public.admin_notes for update
   using (admin_id = auth.uid() or public.get_user_role() = 'MASTER_ADMIN')
   with check (admin_id = auth.uid() or public.get_user_role() = 'MASTER_ADMIN');
 
+drop policy if exists "admin_notes: MASTER_ADMIN DELETE" on public.admin_notes;
 create policy "admin_notes: MASTER_ADMIN DELETE"
   on public.admin_notes for delete
   using (public.get_user_role() = 'MASTER_ADMIN');
 
 -- ── announcements ────────────────────────────────────────────
+drop policy if exists "announcements: 公開済みSELECT" on public.announcements;
 create policy "announcements: 公開済みSELECT"
   on public.announcements for select
   using (
@@ -2793,6 +2964,7 @@ create policy "announcements: 公開済みSELECT"
     or public.get_user_role() in ('ADMIN', 'MASTER_ADMIN')
   );
 
+drop policy if exists "announcements: ADMIN以上INSERT" on public.announcements;
 create policy "announcements: ADMIN以上INSERT"
   on public.announcements for insert
   with check (
@@ -2800,16 +2972,19 @@ create policy "announcements: ADMIN以上INSERT"
     and public.get_user_role() in ('ADMIN', 'MASTER_ADMIN')
   );
 
+drop policy if exists "announcements: ADMIN以上UPDATE" on public.announcements;
 create policy "announcements: ADMIN以上UPDATE"
   on public.announcements for update
   using  (public.get_user_role() in ('ADMIN', 'MASTER_ADMIN'))
   with check (public.get_user_role() in ('ADMIN', 'MASTER_ADMIN'));
 
 -- ── moderation_actions ───────────────────────────────────────
+drop policy if exists "moderation_actions: ADMIN以上SELECT" on public.moderation_actions;
 create policy "moderation_actions: ADMIN以上SELECT"
   on public.moderation_actions for select
   using (public.get_user_role() in ('ADMIN', 'MASTER_ADMIN'));
 
+drop policy if exists "moderation_actions: ADMIN以上INSERT" on public.moderation_actions;
 create policy "moderation_actions: ADMIN以上INSERT"
   on public.moderation_actions for insert
   with check (
@@ -2818,26 +2993,31 @@ create policy "moderation_actions: ADMIN以上INSERT"
   );
 
 -- ── system_settings ──────────────────────────────────────────
+drop policy if exists "system_settings: 認証ユーザーSELECT" on public.system_settings;
 create policy "system_settings: 認証ユーザーSELECT"
   on public.system_settings for select
   using (auth.role() = 'authenticated');
 
+drop policy if exists "system_settings: MASTER_ADMIN全操作" on public.system_settings;
 create policy "system_settings: MASTER_ADMIN全操作"
   on public.system_settings for all
   using (public.get_user_role() = 'MASTER_ADMIN')
   with check (public.get_user_role() = 'MASTER_ADMIN');
 
 -- ── feature_flags ────────────────────────────────────────────
+drop policy if exists "feature_flags: 認証ユーザーSELECT" on public.feature_flags;
 create policy "feature_flags: 認証ユーザーSELECT"
   on public.feature_flags for select
   using (auth.role() = 'authenticated');
 
+drop policy if exists "feature_flags: MASTER_ADMIN全操作" on public.feature_flags;
 create policy "feature_flags: MASTER_ADMIN全操作"
   on public.feature_flags for all
   using (public.get_user_role() = 'MASTER_ADMIN')
   with check (public.get_user_role() = 'MASTER_ADMIN');
 
 -- ── contracts ────────────────────────────────────────────────
+drop policy if exists "contracts: 当事者SELECT" on public.contracts;
 create policy "contracts: 当事者SELECT"
   on public.contracts for select
   using (
@@ -2851,12 +3031,14 @@ create policy "contracts: 当事者SELECT"
     or public.get_user_role() = 'MASTER_ADMIN'
   );
 
+drop policy if exists "contracts: MASTER_ADMIN全操作" on public.contracts;
 create policy "contracts: MASTER_ADMIN全操作"
   on public.contracts for all
   using (public.get_user_role() = 'MASTER_ADMIN')
   with check (public.get_user_role() = 'MASTER_ADMIN');
 
 -- ADMIN: 自社のcontractを作成・更新可能
+drop policy if exists "contracts: ADMIN INSERT" on public.contracts;
 create policy "contracts: ADMIN INSERT"
   on public.contracts for insert
   with check (
@@ -2864,6 +3046,7 @@ create policy "contracts: ADMIN INSERT"
     and company_id = any(public.get_user_company_ids())
   );
 
+drop policy if exists "contracts: ADMIN UPDATE" on public.contracts;
 create policy "contracts: ADMIN UPDATE"
   on public.contracts for update
   using (
@@ -2876,6 +3059,7 @@ create policy "contracts: ADMIN UPDATE"
   );
 
 -- ── contract_status_histories ────────────────────────────────
+drop policy if exists "contract_status_histories: 当事者SELECT" on public.contract_status_histories;
 create policy "contract_status_histories: 当事者SELECT"
   on public.contract_status_histories for select
   using (
@@ -2894,6 +3078,7 @@ create policy "contract_status_histories: 当事者SELECT"
   );
 
 -- ADMIN: 自社contractのステータス変更履歴を記録可能
+drop policy if exists "contract_status_histories: ADMIN INSERT" on public.contract_status_histories;
 create policy "contract_status_histories: ADMIN INSERT"
   on public.contract_status_histories for insert
   with check (
@@ -2902,6 +3087,7 @@ create policy "contract_status_histories: ADMIN INSERT"
   );
 
 -- ── deliverables ─────────────────────────────────────────────
+drop policy if exists "deliverables: 当事者SELECT" on public.deliverables;
 create policy "deliverables: 当事者SELECT"
   on public.deliverables for select
   using (
@@ -2919,6 +3105,7 @@ create policy "deliverables: 当事者SELECT"
     )
   );
 
+drop policy if exists "deliverables: ワーカーINSERT" on public.deliverables;
 create policy "deliverables: ワーカーINSERT"
   on public.deliverables for insert
   with check (
@@ -2929,6 +3116,7 @@ create policy "deliverables: ワーカーINSERT"
     or public.get_user_role() = 'MASTER_ADMIN'
   );
 
+drop policy if exists "deliverables: 当事者UPDATE" on public.deliverables;
 create policy "deliverables: 当事者UPDATE"
   on public.deliverables for update
   using (
@@ -2947,6 +3135,7 @@ create policy "deliverables: 当事者UPDATE"
   );
 
 -- ── deliverable_files ────────────────────────────────────────
+drop policy if exists "deliverable_files: 当事者SELECT" on public.deliverable_files;
 create policy "deliverable_files: 当事者SELECT"
   on public.deliverable_files for select
   using (
@@ -2965,6 +3154,7 @@ create policy "deliverable_files: 当事者SELECT"
     )
   );
 
+drop policy if exists "deliverable_files: アップロードINSERT" on public.deliverable_files;
 create policy "deliverable_files: アップロードINSERT"
   on public.deliverable_files for insert
   with check (
@@ -2975,6 +3165,7 @@ create policy "deliverable_files: アップロードINSERT"
     or public.get_user_role() = 'MASTER_ADMIN'
   );
 
+drop policy if exists "deliverable_files: アップロード者DELETE" on public.deliverable_files;
 create policy "deliverable_files: アップロード者DELETE"
   on public.deliverable_files for delete
   using (
@@ -2986,6 +3177,7 @@ create policy "deliverable_files: アップロード者DELETE"
   );
 
 -- ── disputes ─────────────────────────────────────────────────
+drop policy if exists "disputes: 当事者SELECT" on public.disputes;
 create policy "disputes: 当事者SELECT"
   on public.disputes for select
   using (
@@ -3004,6 +3196,7 @@ create policy "disputes: 当事者SELECT"
     or public.get_user_role() in ('ADMIN', 'MASTER_ADMIN')
   );
 
+drop policy if exists "disputes: 当事者INSERT" on public.disputes;
 create policy "disputes: 当事者INSERT"
   on public.disputes for insert
   with check (
@@ -3021,12 +3214,14 @@ create policy "disputes: 当事者INSERT"
     )
   );
 
+drop policy if exists "disputes: ADMIN UPDATE" on public.disputes;
 create policy "disputes: ADMIN UPDATE"
   on public.disputes for update
   using (public.get_user_role() in ('ADMIN', 'MASTER_ADMIN'))
   with check (public.get_user_role() in ('ADMIN', 'MASTER_ADMIN'));
 
 -- ── dispute_messages ─────────────────────────────────────────
+drop policy if exists "dispute_messages: 当事者SELECT" on public.dispute_messages;
 create policy "dispute_messages: 当事者SELECT"
   on public.dispute_messages for select
   using (
@@ -3046,6 +3241,7 @@ create policy "dispute_messages: 当事者SELECT"
     )
   );
 
+drop policy if exists "dispute_messages: 当事者INSERT" on public.dispute_messages;
 create policy "dispute_messages: 当事者INSERT"
   on public.dispute_messages for insert
   with check (
@@ -3057,59 +3253,71 @@ create policy "dispute_messages: 当事者INSERT"
   );
 
 -- ── reviews ──────────────────────────────────────────────────
+drop policy if exists "reviews: 全員SELECT" on public.reviews;
 create policy "reviews: 全員SELECT"
   on public.reviews for select
   using (auth.role() = 'authenticated');
 
+drop policy if exists "reviews: 本人INSERT" on public.reviews;
 create policy "reviews: 本人INSERT"
   on public.reviews for insert
   with check (reviewer_id = auth.uid());
 
 -- ── review_replies ───────────────────────────────────────────
+drop policy if exists "review_replies: 全員SELECT" on public.review_replies;
 create policy "review_replies: 全員SELECT"
   on public.review_replies for select
   using (auth.role() = 'authenticated');
 
+drop policy if exists "review_replies: 本人INSERT" on public.review_replies;
 create policy "review_replies: 本人INSERT"
   on public.review_replies for insert
   with check (author_id = auth.uid());
 
+drop policy if exists "review_replies: 本人UPDATE" on public.review_replies;
 create policy "review_replies: 本人UPDATE"
   on public.review_replies for update
   using (author_id = auth.uid())
   with check (author_id = auth.uid());
 
 -- ── user_scores ──────────────────────────────────────────────
+drop policy if exists "user_scores: 全員SELECT" on public.user_scores;
 create policy "user_scores: 全員SELECT"
   on public.user_scores for select
   using (auth.role() = 'authenticated');
 
 -- ── company_scores ───────────────────────────────────────────
+drop policy if exists "company_scores: 全員SELECT" on public.company_scores;
 create policy "company_scores: 全員SELECT"
   on public.company_scores for select
   using (auth.role() = 'authenticated');
 
 -- ── wallets ──────────────────────────────────────────────────
+drop policy if exists "wallets: 本人SELECT" on public.wallets;
 create policy "wallets: 本人SELECT"
   on public.wallets for select
   using (user_id = auth.uid() or public.get_user_role() = 'MASTER_ADMIN');
 
 -- ── point_transactions ───────────────────────────────────────
+drop policy if exists "point_transactions: 本人SELECT" on public.point_transactions;
 create policy "point_transactions: 本人SELECT"
   on public.point_transactions for select
   using (user_id = auth.uid() or public.get_user_role() = 'MASTER_ADMIN');
 
 -- ── point_rules ──────────────────────────────────────────────
+drop policy if exists "point_rules: 認証ユーザーSELECT" on public.point_rules;
 create policy "point_rules: 認証ユーザーSELECT"
   on public.point_rules for select
   using (auth.role() = 'authenticated');
 
+drop policy if exists "point_rules: MASTER_ADMIN全操作" on public.point_rules;
 create policy "point_rules: MASTER_ADMIN全操作"
   on public.point_rules for all
   using (public.get_user_role() = 'MASTER_ADMIN')
   with check (public.get_user_role() = 'MASTER_ADMIN');
 
 -- ── point_expirations ────────────────────────────────────────
+drop policy if exists "point_expirations: 本人SELECT" on public.point_expirations;
 create policy "point_expirations: 本人SELECT"
   on public.point_expirations for select
   using (
@@ -3121,40 +3329,48 @@ create policy "point_expirations: 本人SELECT"
   );
 
 -- ── point_grants ─────────────────────────────────────────────
+drop policy if exists "point_grants: 本人SELECT" on public.point_grants;
 create policy "point_grants: 本人SELECT"
   on public.point_grants for select
   using (user_id = auth.uid() or public.get_user_role() = 'MASTER_ADMIN');
 
 -- ── point_redemptions ────────────────────────────────────────
+drop policy if exists "point_redemptions: 本人SELECT" on public.point_redemptions;
 create policy "point_redemptions: 本人SELECT"
   on public.point_redemptions for select
   using (user_id = auth.uid() or public.get_user_role() = 'MASTER_ADMIN');
 
+drop policy if exists "point_redemptions: 本人INSERT" on public.point_redemptions;
 create policy "point_redemptions: 本人INSERT"
   on public.point_redemptions for insert
   with check (user_id = auth.uid());
 
 -- ── product_categories ───────────────────────────────────────
+drop policy if exists "product_categories: 全員SELECT" on public.product_categories;
 create policy "product_categories: 全員SELECT"
   on public.product_categories for select
   using (auth.role() = 'authenticated');
 
+drop policy if exists "product_categories: MASTER_ADMIN全操作" on public.product_categories;
 create policy "product_categories: MASTER_ADMIN全操作"
   on public.product_categories for all
   using (public.get_user_role() = 'MASTER_ADMIN')
   with check (public.get_user_role() = 'MASTER_ADMIN');
 
 -- ── product_tags ─────────────────────────────────────────────
+drop policy if exists "product_tags: 全員SELECT" on public.product_tags;
 create policy "product_tags: 全員SELECT"
   on public.product_tags for select
   using (auth.role() = 'authenticated');
 
+drop policy if exists "product_tags: MASTER_ADMIN全操作" on public.product_tags;
 create policy "product_tags: MASTER_ADMIN全操作"
   on public.product_tags for all
   using (public.get_user_role() = 'MASTER_ADMIN')
   with check (public.get_user_role() = 'MASTER_ADMIN');
 
 -- ── products ─────────────────────────────────────────────────
+drop policy if exists "products: 公開商品SELECT" on public.products;
 create policy "products: 公開商品SELECT"
   on public.products for select
   using (
@@ -3162,30 +3378,36 @@ create policy "products: 公開商品SELECT"
     or public.get_user_role() in ('ADMIN', 'MASTER_ADMIN')
   );
 
+drop policy if exists "product_files: 全員SELECT" on public.product_files;
 create policy "product_files: 全員SELECT"
   on public.product_files for select
   using (auth.role() = 'authenticated');
 
 -- ── product_tag_relations ────────────────────────────────────
+drop policy if exists "product_tag_relations: 全員SELECT" on public.product_tag_relations;
 create policy "product_tag_relations: 全員SELECT"
   on public.product_tag_relations for select
   using (auth.role() = 'authenticated');
 
 -- ── carts ────────────────────────────────────────────────────
+drop policy if exists "carts: 本人SELECT" on public.carts;
 create policy "carts: 本人SELECT"
   on public.carts for select
   using (user_id = auth.uid());
 
+drop policy if exists "carts: 本人INSERT" on public.carts;
 create policy "carts: 本人INSERT"
   on public.carts for insert
   with check (user_id = auth.uid());
 
+drop policy if exists "carts: 本人UPDATE" on public.carts;
 create policy "carts: 本人UPDATE"
   on public.carts for update
   using  (user_id = auth.uid())
   with check (user_id = auth.uid());
 
 -- ── cart_items ───────────────────────────────────────────────
+drop policy if exists "cart_items: 本人SELECT" on public.cart_items;
 create policy "cart_items: 本人SELECT"
   on public.cart_items for select
   using (
@@ -3195,6 +3417,7 @@ create policy "cart_items: 本人SELECT"
     )
   );
 
+drop policy if exists "cart_items: 本人INSERT" on public.cart_items;
 create policy "cart_items: 本人INSERT"
   on public.cart_items for insert
   with check (
@@ -3204,6 +3427,7 @@ create policy "cart_items: 本人INSERT"
     )
   );
 
+drop policy if exists "cart_items: 本人UPDATE" on public.cart_items;
 create policy "cart_items: 本人UPDATE"
   on public.cart_items for update
   using (
@@ -3213,6 +3437,7 @@ create policy "cart_items: 本人UPDATE"
     )
   );
 
+drop policy if exists "cart_items: 本人DELETE" on public.cart_items;
 create policy "cart_items: 本人DELETE"
   on public.cart_items for delete
   using (
@@ -3223,15 +3448,18 @@ create policy "cart_items: 本人DELETE"
   );
 
 -- ── orders ───────────────────────────────────────────────────
+drop policy if exists "orders: 本人SELECT" on public.orders;
 create policy "orders: 本人SELECT"
   on public.orders for select
   using (user_id = auth.uid() or public.get_user_role() = 'MASTER_ADMIN');
 
+drop policy if exists "orders: 本人INSERT" on public.orders;
 create policy "orders: 本人INSERT"
   on public.orders for insert
   with check (user_id = auth.uid());
 
 -- ── order_items ──────────────────────────────────────────────
+drop policy if exists "order_items: 本人SELECT" on public.order_items;
 create policy "order_items: 本人SELECT"
   on public.order_items for select
   using (
@@ -3243,6 +3471,7 @@ create policy "order_items: 本人SELECT"
   );
 
 -- ── payments ─────────────────────────────────────────────────
+drop policy if exists "payments: 本人SELECT" on public.payments;
 create policy "payments: 本人SELECT"
   on public.payments for select
   using (
@@ -3255,6 +3484,7 @@ create policy "payments: 本人SELECT"
   );
 
 -- ── coupons ──────────────────────────────────────────────────
+drop policy if exists "coupons: 認証ユーザーSELECT" on public.coupons;
 create policy "coupons: 認証ユーザーSELECT"
   on public.coupons for select
   using (
@@ -3262,21 +3492,25 @@ create policy "coupons: 認証ユーザーSELECT"
     or public.get_user_role() in ('ADMIN', 'MASTER_ADMIN')
   );
 
+drop policy if exists "coupons: MASTER_ADMIN全操作" on public.coupons;
 create policy "coupons: MASTER_ADMIN全操作"
   on public.coupons for all
   using (public.get_user_role() = 'MASTER_ADMIN')
   with check (public.get_user_role() = 'MASTER_ADMIN');
 
 -- ── coupon_redemptions ───────────────────────────────────────
+drop policy if exists "coupon_redemptions: 本人SELECT" on public.coupon_redemptions;
 create policy "coupon_redemptions: 本人SELECT"
   on public.coupon_redemptions for select
   using (user_id = auth.uid() or public.get_user_role() = 'MASTER_ADMIN');
 
+drop policy if exists "coupon_redemptions: 本人INSERT" on public.coupon_redemptions;
 create policy "coupon_redemptions: 本人INSERT"
   on public.coupon_redemptions for insert
   with check (user_id = auth.uid());
 
 -- ── invoices ─────────────────────────────────────────────────
+drop policy if exists "invoices: 本人SELECT" on public.invoices;
 create policy "invoices: 本人SELECT"
   on public.invoices for select
   using (
@@ -3285,43 +3519,51 @@ create policy "invoices: 本人SELECT"
   );
 
 -- ── user_action_logs ─────────────────────────────────────────
+drop policy if exists "user_action_logs: 本人INSERT" on public.user_action_logs;
 create policy "user_action_logs: 本人INSERT"
   on public.user_action_logs for insert
   with check (user_id = auth.uid());
 
+drop policy if exists "user_action_logs: MASTER_ADMIN SELECT" on public.user_action_logs;
 create policy "user_action_logs: MASTER_ADMIN SELECT"
   on public.user_action_logs for select
   using (public.get_user_role() = 'MASTER_ADMIN');
 
 -- ── search_logs ──────────────────────────────────────────────
+drop policy if exists "search_logs: INSERT" on public.search_logs;
 create policy "search_logs: INSERT"
   on public.search_logs for insert
   with check (
     user_id is null or user_id = auth.uid()
   );
 
+drop policy if exists "search_logs: MASTER_ADMIN SELECT" on public.search_logs;
 create policy "search_logs: MASTER_ADMIN SELECT"
   on public.search_logs for select
   using (public.get_user_role() = 'MASTER_ADMIN');
 
 -- ── page_view_logs ───────────────────────────────────────────
+drop policy if exists "page_view_logs: INSERT" on public.page_view_logs;
 create policy "page_view_logs: INSERT"
   on public.page_view_logs for insert
   with check (
     user_id is null or user_id = auth.uid()
   );
 
+drop policy if exists "page_view_logs: MASTER_ADMIN SELECT" on public.page_view_logs;
 create policy "page_view_logs: MASTER_ADMIN SELECT"
   on public.page_view_logs for select
   using (public.get_user_role() = 'MASTER_ADMIN');
 
 -- ── conversion_events ────────────────────────────────────────
+drop policy if exists "conversion_events: INSERT" on public.conversion_events;
 create policy "conversion_events: INSERT"
   on public.conversion_events for insert
   with check (
     user_id is null or user_id = auth.uid()
   );
 
+drop policy if exists "conversion_events: MASTER_ADMIN SELECT" on public.conversion_events;
 create policy "conversion_events: MASTER_ADMIN SELECT"
   on public.conversion_events for select
   using (public.get_user_role() = 'MASTER_ADMIN');
@@ -3345,8 +3587,19 @@ values (
 )
 on conflict (id) do nothing;
 
+-- 既存 DB 収束用: 上の insert は既存バケット行を更新しないため、上限と許可 mime を明示的に揃える。
+update storage.buckets
+   set public             = true,
+       file_size_limit    = 52428800,
+       allowed_mime_types = array[
+         'image/png', 'image/jpeg', 'image/webp', 'image/gif',
+         'video/mp4', 'video/webm', 'video/quicktime'
+       ]
+ where id = 'thumbnails';
+
 -- 認証済みユーザーは自分のフォルダにアップロード可能
 -- パス形式: thumbnails/{user_id}/{filename}
+drop policy if exists "thumbnails: authenticated upload own folder" on storage.objects;
 create policy "thumbnails: authenticated upload own folder"
   on storage.objects for insert
   with check (
@@ -3356,6 +3609,7 @@ create policy "thumbnails: authenticated upload own folder"
   );
 
 -- 認証済みユーザーは自分のファイルを更新可能
+drop policy if exists "thumbnails: authenticated update own" on storage.objects;
 create policy "thumbnails: authenticated update own"
   on storage.objects for update
   using (
@@ -3365,6 +3619,7 @@ create policy "thumbnails: authenticated update own"
   );
 
 -- 認証済みユーザーは自分のファイルを削除可能
+drop policy if exists "thumbnails: authenticated delete own" on storage.objects;
 create policy "thumbnails: authenticated delete own"
   on storage.objects for delete
   using (
@@ -3374,6 +3629,7 @@ create policy "thumbnails: authenticated delete own"
   );
 
 -- 全員が thumbnails バケットのファイルを閲覧可能（public バケット補助）
+drop policy if exists "thumbnails: public select" on storage.objects;
 create policy "thumbnails: public select"
   on storage.objects for select
   using (bucket_id = 'thumbnails');
@@ -3473,6 +3729,11 @@ create index if not exists community_posts_created_idx      on public.community_
 create index if not exists community_posts_repost_idx       on public.community_posts(repost_of_id);
 create index if not exists community_posts_deleted_idx      on public.community_posts(deleted_at) where deleted_at is null;
 create index if not exists community_posts_search_idx       on public.community_posts using gin(to_tsvector('simple', body));
+-- 既存 DB 収束用（新規 DB では no-op）
+alter table public.community_posts
+  add column if not exists weekly_theme_id uuid
+    references public.community_weekly_themes(id) on delete set null;
+
 create index if not exists community_posts_weekly_theme_idx on public.community_posts(weekly_theme_id);
 
 -- ── community_post_attachments: 添付（Storage パス + メタのみ） ──
@@ -3527,6 +3788,10 @@ create table if not exists public.community_post_tags (
   created_at  timestamptz not null default now(),
   usage_count int         not null default 0
 );
+-- 既存 DB 収束用（新規 DB では no-op）
+alter table public.community_post_tags
+  add column if not exists usage_count int not null default 0;
+
 create index if not exists community_tags_usage_idx on public.community_post_tags(usage_count desc);
 
 create table if not exists public.community_post_tag_relations (
@@ -3823,6 +4088,7 @@ alter table public.community_poll_votes         enable row level security;
 -- ============================================================
 
 -- community_posts: 自社・非削除・非ドラフト（または本人）を閲覧
+drop policy if exists "community_posts: select visible" on public.community_posts;
 create policy "community_posts: select visible" on public.community_posts
   for select using (
     deleted_at is null
@@ -3832,15 +4098,19 @@ create policy "community_posts: select visible" on public.community_posts
       or (is_draft = false and visibility <> 'PRIVATE')
     )
   );
+drop policy if exists "community_posts: master select all" on public.community_posts;
 create policy "community_posts: master select all" on public.community_posts
   for select using (public.get_user_role() = 'MASTER_ADMIN');
+drop policy if exists "community_posts: insert own" on public.community_posts;
 create policy "community_posts: insert own" on public.community_posts
   for insert with check (
     author_user_id = auth.uid()
     and company_id = any(public.get_user_company_ids())
   );
+drop policy if exists "community_posts: update own" on public.community_posts;
 create policy "community_posts: update own" on public.community_posts
   for update using (author_user_id = auth.uid());
+drop policy if exists "community_posts: admin moderate" on public.community_posts;
 create policy "community_posts: admin moderate" on public.community_posts
   for update using (
     public.get_user_role() in ('ADMIN','MASTER_ADMIN')
@@ -3848,36 +4118,48 @@ create policy "community_posts: admin moderate" on public.community_posts
   );
 
 -- 子テーブル: 親投稿が見えれば見える / 本人のみ書込
+drop policy if exists "community_attachments: select via post" on public.community_post_attachments;
 create policy "community_attachments: select via post" on public.community_post_attachments
   for select using (
     exists (select 1 from public.community_posts p where p.id = post_id)
   );
+drop policy if exists "community_attachments: insert own" on public.community_post_attachments;
 create policy "community_attachments: insert own" on public.community_post_attachments
   for insert with check (uploaded_by = auth.uid());
 
+drop policy if exists "community_comments: select" on public.community_post_comments;
 create policy "community_comments: select" on public.community_post_comments
   for select using (deleted_at is null);
+drop policy if exists "community_comments: insert own" on public.community_post_comments;
 create policy "community_comments: insert own" on public.community_post_comments
   for insert with check (author_user_id = auth.uid());
+drop policy if exists "community_comments: update own" on public.community_post_comments;
 create policy "community_comments: update own" on public.community_post_comments
   for update using (author_user_id = auth.uid());
 
+drop policy if exists "community_reactions: select" on public.community_post_reactions;
 create policy "community_reactions: select" on public.community_post_reactions
   for select using (true);
+drop policy if exists "community_reactions: insert own" on public.community_post_reactions;
 create policy "community_reactions: insert own" on public.community_post_reactions
   for insert with check (user_id = auth.uid());
+drop policy if exists "community_reactions: delete own" on public.community_post_reactions;
 create policy "community_reactions: delete own" on public.community_post_reactions
   for delete using (user_id = auth.uid());
 
 -- タグ: 参照は全員 / 新規タグ作成は認証ユーザー（重複は name/slug の一意制約で吸収）
+drop policy if exists "community_tags: select" on public.community_post_tags;
 create policy "community_tags: select" on public.community_post_tags
   for select using (true);
+drop policy if exists "community_tags: insert authenticated" on public.community_post_tags;
 create policy "community_tags: insert authenticated" on public.community_post_tags
   for insert with check (auth.uid() is not null);
 
 -- タグ紐付け: 参照は全員 / 付与・削除は自分の投稿に限る
+drop policy if exists "community_tag_relations: select" on public.community_post_tag_relations;
 create policy "community_tag_relations: select" on public.community_post_tag_relations
   for select using (true);
+drop policy if exists "community_tag_relations: insert via own post" on public.community_post_tag_relations;
 create policy "community_tag_relations: insert via own post" on public.community_post_tag_relations
   for insert with check (
     exists (
@@ -3885,6 +4167,7 @@ create policy "community_tag_relations: insert via own post" on public.community
       where p.id = post_id and p.author_user_id = auth.uid()
     )
   );
+drop policy if exists "community_tag_relations: delete via own post" on public.community_post_tag_relations;
 create policy "community_tag_relations: delete via own post" on public.community_post_tag_relations
   for delete using (
     exists (
@@ -3893,13 +4176,17 @@ create policy "community_tag_relations: delete via own post" on public.community
     )
   );
 
+drop policy if exists "community_reports: insert own" on public.community_post_reports;
 create policy "community_reports: insert own" on public.community_post_reports
   for insert with check (reported_by = auth.uid());
+drop policy if exists "community_reports: admin select" on public.community_post_reports;
 create policy "community_reports: admin select" on public.community_post_reports
   for select using (public.get_user_role() in ('ADMIN','MASTER_ADMIN'));
+drop policy if exists "community_reports: admin update" on public.community_post_reports;
 create policy "community_reports: admin update" on public.community_post_reports
   for update using (public.get_user_role() in ('ADMIN','MASTER_ADMIN'));
 
+drop policy if exists "community_drafts: own or admin" on public.community_external_drafts;
 create policy "community_drafts: own or admin" on public.community_external_drafts
   for all
   using (
@@ -3910,11 +4197,13 @@ create policy "community_drafts: own or admin" on public.community_external_draf
   with check (created_by = auth.uid());
 
 -- 週替わりテーマ: 全社共通(NULL) または自社は全員閲覧可 / 管理は ADMIN・MASTER_ADMIN
+drop policy if exists "weekly_themes: select in scope" on public.community_weekly_themes;
 create policy "weekly_themes: select in scope" on public.community_weekly_themes
   for select using (
     company_id is null
     or company_id = any(public.get_user_company_ids())
   );
+drop policy if exists "weekly_themes: admin manage" on public.community_weekly_themes;
 create policy "weekly_themes: admin manage" on public.community_weekly_themes
   for all
   using (
@@ -3927,11 +4216,13 @@ create policy "weekly_themes: admin manage" on public.community_weekly_themes
   );
 
 -- メンション: 自分宛て、または親投稿が見えれば閲覧可 / 付与・削除は自分の投稿に限る
+drop policy if exists "community_mentions: select" on public.community_post_mentions;
 create policy "community_mentions: select" on public.community_post_mentions
   for select using (
     mentioned_user_id = auth.uid()
     or exists (select 1 from public.community_posts p where p.id = post_id)
   );
+drop policy if exists "community_mentions: insert via own post" on public.community_post_mentions;
 create policy "community_mentions: insert via own post" on public.community_post_mentions
   for insert with check (
     exists (
@@ -3939,6 +4230,7 @@ create policy "community_mentions: insert via own post" on public.community_post
        where p.id = post_id and p.author_user_id = auth.uid()
     )
   );
+drop policy if exists "community_mentions: delete via own post" on public.community_post_mentions;
 create policy "community_mentions: delete via own post" on public.community_post_mentions
   for delete using (
     exists (
@@ -3948,10 +4240,12 @@ create policy "community_mentions: delete via own post" on public.community_post
   );
 
 -- アンケート: 親投稿が見えれば閲覧可 / 作成は自分の投稿に限る
+drop policy if exists "community_polls: select via post" on public.community_polls;
 create policy "community_polls: select via post" on public.community_polls
   for select using (
     exists (select 1 from public.community_posts p where p.id = post_id)
   );
+drop policy if exists "community_polls: insert via own post" on public.community_polls;
 create policy "community_polls: insert via own post" on public.community_polls
   for insert with check (
     exists (
@@ -3960,10 +4254,12 @@ create policy "community_polls: insert via own post" on public.community_polls
     )
   );
 
+drop policy if exists "community_poll_options: select via poll" on public.community_poll_options;
 create policy "community_poll_options: select via poll" on public.community_poll_options
   for select using (
     exists (select 1 from public.community_polls pl where pl.id = poll_id)
   );
+drop policy if exists "community_poll_options: insert via own post" on public.community_poll_options;
 create policy "community_poll_options: insert via own post" on public.community_poll_options
   for insert with check (
     exists (
@@ -3975,10 +4271,13 @@ create policy "community_poll_options: insert via own post" on public.community_
   );
 
 -- 投票: 閲覧は全員（集計表示のため） / 自分の票のみ作成・削除
+drop policy if exists "community_poll_votes: select" on public.community_poll_votes;
 create policy "community_poll_votes: select" on public.community_poll_votes
   for select using (true);
+drop policy if exists "community_poll_votes: insert own" on public.community_poll_votes;
 create policy "community_poll_votes: insert own" on public.community_poll_votes
   for insert with check (user_id = auth.uid());
+drop policy if exists "community_poll_votes: delete own" on public.community_poll_votes;
 create policy "community_poll_votes: delete own" on public.community_poll_votes
   for delete using (user_id = auth.uid());
 
@@ -4034,6 +4333,17 @@ values (
 )
 on conflict (id) do nothing;
 
+-- 既存 DB 収束用（上の insert は既存バケット行を更新しないため）
+update storage.buckets
+   set public             = true,
+       file_size_limit    = 52428800,
+       allowed_mime_types = array[
+         'image/png','image/jpeg','image/webp','image/gif',
+         'video/mp4','video/webm'
+       ]
+ where id = 'community-media';
+
+drop policy if exists "community-media: insert own folder" on storage.objects;
 create policy "community-media: insert own folder"
   on storage.objects for insert
   with check (
@@ -4041,6 +4351,7 @@ create policy "community-media: insert own folder"
     and auth.uid() is not null
     and (storage.foldername(name))[2] = auth.uid()::text
   );
+drop policy if exists "community-media: update own" on storage.objects;
 create policy "community-media: update own"
   on storage.objects for update
   using (
@@ -4048,6 +4359,7 @@ create policy "community-media: update own"
     and auth.uid() is not null
     and (storage.foldername(name))[2] = auth.uid()::text
   );
+drop policy if exists "community-media: delete own" on storage.objects;
 create policy "community-media: delete own"
   on storage.objects for delete
   using (
@@ -4055,6 +4367,7 @@ create policy "community-media: delete own"
     and auth.uid() is not null
     and (storage.foldername(name))[2] = auth.uid()::text
   );
+drop policy if exists "community-media: public select" on storage.objects;
 create policy "community-media: public select"
   on storage.objects for select
   using (bucket_id = 'community-media');
@@ -4166,6 +4479,7 @@ alter table public.newsletter_issues    enable row level security;
 alter table public.newsletter_view_logs enable row level security;
 
 -- 閲覧: 公開済み(PUBLISHED) かつ スコープ内は全員閲覧可
+drop policy if exists "newsletter_issues: select published in scope" on public.newsletter_issues;
 create policy "newsletter_issues: select published in scope" on public.newsletter_issues
   for select using (
     status = 'PUBLISHED'
@@ -4173,6 +4487,7 @@ create policy "newsletter_issues: select published in scope" on public.newslette
   );
 
 -- 管理: ADMIN/MASTER_ADMIN はスコープ内を全操作（下書き閲覧含む）
+drop policy if exists "newsletter_issues: admin manage in scope" on public.newsletter_issues;
 create policy "newsletter_issues: admin manage in scope" on public.newsletter_issues
   for all
   using (
@@ -4186,6 +4501,7 @@ create policy "newsletter_issues: admin manage in scope" on public.newsletter_is
 
 -- 閲覧ログ: 本人分 + ADMIN/MASTER_ADMIN
 -- （INSERT は increment_newsletter_view() が security definer で行うため直接権限は付与しない）
+drop policy if exists "newsletter_view_logs: select own or admin" on public.newsletter_view_logs;
 create policy "newsletter_view_logs: select own or admin" on public.newsletter_view_logs
   for select using (
     user_id = auth.uid()
@@ -4205,6 +4521,7 @@ grant select on public.newsletter_view_logs to authenticated;
 
 -- ── user_profiles: 同じ会社の在籍メンバー同士は互いのプロフィールを閲覧可 ──
 -- （Section 11 の「本人のみ」「ADMIN 全件」ポリシーは温存し、これを追加する）
+drop policy if exists "user_profiles: select same company" on public.user_profiles;
 create policy "user_profiles: select same company" on public.user_profiles
   for select using (
     exists (
@@ -4271,6 +4588,7 @@ grant execute on function public.people_directory(uuid) to service_role;
 -- 「MASTER_ADMIN のみ管理」に加えて ADMIN 用ポリシーを追加し、
 -- Section 5 の「authenticated は SELECT のみ」に INSERT/UPDATE を追加付与する。
 -- （テーブル権限が無いと RLS に到達する前に弾かれるため両方必要）
+drop policy if exists "post_tags: admin manage" on public.post_tags;
 create policy "post_tags: admin manage" on public.post_tags
   for all
   using  (public.get_user_role() in ('ADMIN', 'MASTER_ADMIN'))
