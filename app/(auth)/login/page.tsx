@@ -70,7 +70,7 @@ export default function LoginPage() {
     ) {
       router.push("/company/posts");
     } else {
-      router.push("/app/posts");
+      router.push("/app");
     }
     router.refresh();
   };

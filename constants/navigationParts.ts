@@ -239,6 +239,15 @@ export const sidebarGroups = [
         roles: ["USER", "ADMIN", "MASTER_ADMIN"],
       },
       {
+        id: "user-newsletter",
+        label: "社内報",
+        href: "/app/newsletter",
+        matchHrefs: ["/app/newsletter"],
+        icon: "article",
+        lifecycle: "implemented",
+        roles: ["USER", "ADMIN", "MASTER_ADMIN"],
+      },
+      {
         id: "issues",
         label: "困りごと",
         href: "/app/issues",
@@ -487,6 +496,15 @@ export const sidebarGroups = [
         roles: ["ADMIN", "MASTER_ADMIN"],
       },
       {
+        id: "admin-weekly-themes",
+        label: "週替わりテーマ管理",
+        href: "/company/weekly-themes",
+        matchHrefs: ["/company/weekly-themes"],
+        icon: "article",
+        lifecycle: "implemented",
+        roles: ["ADMIN", "MASTER_ADMIN"],
+      },
+      {
         id: "admin-issues",
         label: "困りごと管理",
         href: "/company/issues",
@@ -658,6 +676,7 @@ export const CURRENT_RELEASE_ITEM_IDS: ReadonlySet<string> = new Set<string>([
   "user-applications",
   "user-my-page",
   "user-my-posts",
+  "user-newsletter",
   "admin-user-posts",
   "admin-user-casual-new",
   "admin-user-applications",
@@ -669,9 +688,12 @@ export const CURRENT_RELEASE_ITEM_IDS: ReadonlySet<string> = new Set<string>([
   // 社内SNS（いいね・リポスト・コメント・週替わりテーマ）。第1弾リリースはこれが主役。
   "community-feed",
   "admin-community-feed",
-  // ② 社員検索 / ③ スキル / ④ おすすめ / ⑤⑥ 社内報 は第1弾では非表示（次フェーズ）。
-  //   社員検索: employee-search / admin-employee-search
-  //   社内報管理: admin-newsletter
+  // ── 第2弾（phase-2）で追加公開する項目 ──
+  // ② 社員検索 / ⑤⑥ 社内報 / 週替わりテーマ管理。案件オススメは公式案件一覧内に統合。
+  "employee-search",
+  "admin-employee-search",
+  "admin-newsletter",
+  "admin-weekly-themes",
 ]);
 
 export function getSidebarGroups({

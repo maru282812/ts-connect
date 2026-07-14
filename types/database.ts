@@ -181,6 +181,31 @@ export interface CommunityWeeklyTheme {
 }
 
 // ============================================================
+// User Profile（マイページ拡張 / 社員検索・Phase2）
+// public.user_profiles（001_schema.sql + migration 028）
+// ============================================================
+export type Availability = "AVAILABLE" | "PART_TIME" | "UNAVAILABLE";
+
+export interface UserProfileRow {
+  id: string;
+  user_id: string;
+  bio: string | null;
+  skills: string[] | null;
+  special_skills: string[] | null;
+  hobbies: string[] | null;
+  interest_themes: string | null;
+  consult_topics: string | null;
+  availability: Availability | null;
+  portfolio_url: string | null;
+  linkedin_url: string | null;
+  github_url: string | null;
+  twitter_url: string | null;
+  preferred_work_style: string[] | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// ============================================================
 // API Response Types
 // ============================================================
 export interface ApiResponse<T> {

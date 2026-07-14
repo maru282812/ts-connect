@@ -818,3 +818,92 @@ export function getActiveTheme(
   if (inRange) return inRange;
   return themes.find((t) => t.is_active) ?? null;
 }
+
+// ── 週替わりテーマ管理（ADMIN。書き込みは migration 021/023 の ADMIN ポリシー前提） ──
+export interface WeeklyThemeInput {
+  title: string;
+  description: string;
+  startsOn: string; // YYYY-MM-DD
+  endsOn: string; // YYYY-MM-DD
+  isActive: boolean;
+}
+
+/** 過去分を含む全テーマ（開始日の新しい順）。管理一覧用。 */
+export async function fetchAllThemes(): Promise<CommunityWeeklyTheme[]> {
+  const supabase = createClient();
+  const { data } = await supabase
+    .from("community_weekly_themes")
+    .select("*")
+    .order("starts_on", { ascending: false });
+  return (data as CommunityWeeklyTheme[]) ?? [];
+}
+
+function themePayload(input: WeeklyThemeInput) {
+  return {
+    title: input.title,
+    description: input.description.trim() || null,
+    starts_on: input.startsOn,
+    ends_on: input.endsOn,
+    is_active: input.isActive,
+  };
+}
+
+export async function createTheme(
+  input: WeeklyThemeInput,
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const supabase = createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    const { error } = await supabase
+      .from("community_weekly_themes")
+      .insert({ ...themePayload(input), created_by: user?.id ?? null });
+    if (error) return { ok: false, error: error.message };
+    return { ok: true };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "作成に失敗しました",
+    };
+  }
+}
+
+export async function updateTheme(
+  id: string,
+  input: WeeklyThemeInput,
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("community_weekly_themes")
+      .update(themePayload(input))
+      .eq("id", id);
+    if (error) return { ok: false, error: error.message };
+    return { ok: true };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "更新に失敗しました",
+    };
+  }
+}
+
+export async function deleteTheme(
+  id: string,
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("community_weekly_themes")
+      .delete()
+      .eq("id", id);
+    if (error) return { ok: false, error: error.message };
+    return { ok: true };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "削除に失敗しました",
+    };
+  }
+}

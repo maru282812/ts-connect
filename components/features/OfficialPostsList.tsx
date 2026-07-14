@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/common/PageHeader";
 import { PostCard } from "@/components/common/PostCard";
 import { SearchBar } from "@/components/common/SearchBar";
+import { fetchRecommendedPosts, type RecommendedPost } from "@/lib/recommend";
 import { createClient } from "@/lib/supabase/client";
 import type { PostWithRelations } from "@/types/database";
 
@@ -17,6 +18,14 @@ export function OfficialPostsList({
   const [posts, setPosts] = useState<PostWithRelations[]>([]);
   const [search, setSearch] = useState("");
   const [isLoading, setIsLoading] = useState(true);
+  const [recommended, setRecommended] = useState<RecommendedPost[]>([]);
+
+  // 「あなたへのオススメ」（プロフィールのスキル × 案件タグの一致）。検索とは独立に一度だけ取得。
+  useEffect(() => {
+    (async () => {
+      setRecommended(await fetchRecommendedPosts(5));
+    })();
+  }, []);
 
   useEffect(() => {
     const fetchPosts = async () => {
@@ -53,6 +62,32 @@ export function OfficialPostsList({
         title="公式案件"
         description="会社・運営が掲載する公式案件一覧"
       />
+
+      {recommended.length > 0 && (
+        <section className="mb-8">
+          <div className="flex items-center gap-2 mb-3">
+            <h2 className="text-lg font-bold text-default-800">
+              あなたへのオススメ
+            </h2>
+            <span className="text-xs text-default-400">
+              あなたのスキルに合う案件
+            </span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {recommended.map((r) => (
+              <div key={r.post.id} className="flex flex-col gap-1.5">
+                <PostCard
+                  post={r.post}
+                  href={`${postDetailBasePath}/${r.post.id}`}
+                />
+                <p className="text-[11px] text-primary px-1">
+                  一致タグ: {r.matchedTags.join(" / ")}
+                </p>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       <div className="mb-6">
         <SearchBar
