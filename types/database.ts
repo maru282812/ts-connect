@@ -70,6 +70,8 @@ export interface Post {
   is_application_limit_enabled: boolean;
   thumbnail_url: string | null;
   reference_url: string | null;
+  view_count: number;
+  like_count: number;
   created_at: string;
   updated_at: string;
 }
@@ -102,6 +104,13 @@ export interface PostWithRelations extends Post {
 
 export interface ApplicationWithPost extends Application {
   posts: { id: string; title: string; post_type: PostType } | null;
+}
+
+export interface PostReaction {
+  id: string;
+  post_id: string;
+  user_id: string;
+  created_at: string;
 }
 
 // ============================================================

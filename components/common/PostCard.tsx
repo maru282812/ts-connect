@@ -65,7 +65,11 @@ export function PostCard({ post, href }: PostCardProps) {
           {post.price_text && <span>単価: {post.price_text}</span>}
         </div>
       </CardBody>
-      <CardFooter className="pt-2">
+      <CardFooter className="pt-2 flex flex-col gap-3">
+        <div className="flex gap-4 text-xs text-default-500 w-full">
+          <span>👁 {post.view_count ?? 0}</span>
+          <span>❤️ {post.like_count ?? 0}</span>
+        </div>
         <AppButton
           as={Link}
           href={href}
