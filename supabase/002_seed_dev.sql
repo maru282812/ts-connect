@@ -5,6 +5,10 @@
 -- 目的: 権限別の表示・操作動線を確認できるデータを投入する
 -- 前提: 001_schema.sql を適用済みであること
 --
+-- 冪等性: 全レコードを固定 UUID + upsert（on conflict do update）で投入するため、
+--         何度流しても同じ状態に収束する。既にデータが入っていても上書きされる。
+--         （多対多の中間テーブルのみ on conflict do nothing。行＝キーのため更新項目なし）
+--
 -- ログイン情報（共通パスワード: password123）
 --
 --   MASTER_ADMIN:
@@ -274,7 +278,9 @@ begin
     (usr3, co4, 'USER',  'inactive'),
     (usr4, co4, 'USER',  'active'),
     (usr5, co5, 'USER',  'active')
-  on conflict (user_id, company_id) do nothing;
+  on conflict (user_id, company_id) do update set
+    role = excluded.role,
+    status = excluded.status;
 
   -- ==========================================================
   -- STEP 4: 公式案件（OFFICIAL）8件
@@ -313,7 +319,21 @@ begin
     E'・Excel の基本操作（入力・集計）\n' ||
     E'・正確かつ丁寧な作業ができる方\n' ||
     E'・守秘義務を守れる方'
-  ) on conflict (id) do nothing;
+  ) on conflict (id) do update set
+    company_id = excluded.company_id,
+    created_by_user_id = excluded.created_by_user_id,
+    title = excluded.title,
+    body = excluded.body,
+    post_type = excluded.post_type,
+    post_status = excluded.post_status,
+    price_text = excluded.price_text,
+    contact_person_name = excluded.contact_person_name,
+    deadline_at = excluded.deadline_at,
+    published_at = excluded.published_at,
+    thumbnail_url = excluded.thumbnail_url,
+    application_limit = excluded.application_limit,
+    is_application_limit_enabled = excluded.is_application_limit_enabled,
+    requirements = excluded.requirements;
 
   -- ---- 2. FAQ整理 / DRAFT / サムネなし ----
   insert into public.posts (
@@ -330,7 +350,14 @@ begin
     E'※ 現在下書き中のため、詳細は後日追記予定です。',
     'OFFICIAL', 'DRAFT',
     '30,000〜50,000円（固定）'
-  ) on conflict (id) do nothing;
+  ) on conflict (id) do update set
+    company_id = excluded.company_id,
+    created_by_user_id = excluded.created_by_user_id,
+    title = excluded.title,
+    body = excluded.body,
+    post_type = excluded.post_type,
+    post_status = excluded.post_status,
+    price_text = excluded.price_text;
 
   -- ---- 3. Webサイト軽微修正 / OPEN / 募集3名 / サムネあり ----
   insert into public.posts (
@@ -355,7 +382,21 @@ begin
     3, true,
     E'・HTML / CSS（必須）、JavaScript（尚可）\n' ||
     E'・Figma 閲覧・書き出し操作'
-  ) on conflict (id) do nothing;
+  ) on conflict (id) do update set
+    company_id = excluded.company_id,
+    created_by_user_id = excluded.created_by_user_id,
+    title = excluded.title,
+    body = excluded.body,
+    post_type = excluded.post_type,
+    post_status = excluded.post_status,
+    price_text = excluded.price_text,
+    contact_person_name = excluded.contact_person_name,
+    deadline_at = excluded.deadline_at,
+    published_at = excluded.published_at,
+    thumbnail_url = excluded.thumbnail_url,
+    application_limit = excluded.application_limit,
+    is_application_limit_enabled = excluded.is_application_limit_enabled,
+    requirements = excluded.requirements;
 
   -- ---- 4. アンケート結果レポート作成 / OPEN / 締切近い ----
   insert into public.posts (
@@ -377,7 +418,18 @@ begin
     now() + interval '5 days', now() - interval '2 days',
     E'・Excel / スプレッドシートでのピボット・グラフ作成経験\n' ||
     E'・定量データを分かりやすくまとめる力'
-  ) on conflict (id) do nothing;
+  ) on conflict (id) do update set
+    company_id = excluded.company_id,
+    created_by_user_id = excluded.created_by_user_id,
+    title = excluded.title,
+    body = excluded.body,
+    post_type = excluded.post_type,
+    post_status = excluded.post_status,
+    price_text = excluded.price_text,
+    contact_person_name = excluded.contact_person_name,
+    deadline_at = excluded.deadline_at,
+    published_at = excluded.published_at,
+    requirements = excluded.requirements;
 
   -- ---- 5. 社内資料体裁調整 / CLOSED / サムネあり ----
   insert into public.posts (
@@ -394,7 +446,18 @@ begin
     '40,000円（固定）', '管理者B',
     now() - interval '20 days', now() - interval '5 days',
     'https://picsum.photos/seed/slides005/800/450'
-  ) on conflict (id) do nothing;
+  ) on conflict (id) do update set
+    company_id = excluded.company_id,
+    created_by_user_id = excluded.created_by_user_id,
+    title = excluded.title,
+    body = excluded.body,
+    post_type = excluded.post_type,
+    post_status = excluded.post_status,
+    price_text = excluded.price_text,
+    contact_person_name = excluded.contact_person_name,
+    published_at = excluded.published_at,
+    closed_at = excluded.closed_at,
+    thumbnail_url = excluded.thumbnail_url;
 
   -- ---- 6. データ入力支援 / OPEN / 担当者あり / 募集5名 ----
   insert into public.posts (
@@ -415,7 +478,19 @@ begin
     '1,200円/時間', '管理者A',
     now() + interval '10 days', now() - interval '1 day',
     5, true
-  ) on conflict (id) do nothing;
+  ) on conflict (id) do update set
+    company_id = excluded.company_id,
+    created_by_user_id = excluded.created_by_user_id,
+    title = excluded.title,
+    body = excluded.body,
+    post_type = excluded.post_type,
+    post_status = excluded.post_status,
+    price_text = excluded.price_text,
+    contact_person_name = excluded.contact_person_name,
+    deadline_at = excluded.deadline_at,
+    published_at = excluded.published_at,
+    application_limit = excluded.application_limit,
+    is_application_limit_enabled = excluded.is_application_limit_enabled;
 
   -- ---- 7. 営業資料レビュー / DRAFT ----
   insert into public.posts (
@@ -427,7 +502,13 @@ begin
     E'新しく作成した営業提案資料について、外部の視点でフィードバックをいただきたいと考えています。\n\n' ||
     E'※ 詳細条件は調整中のため、現在は下書きとして保存しています。',
     'OFFICIAL', 'DRAFT'
-  ) on conflict (id) do nothing;
+  ) on conflict (id) do update set
+    company_id = excluded.company_id,
+    created_by_user_id = excluded.created_by_user_id,
+    title = excluded.title,
+    body = excluded.body,
+    post_type = excluded.post_type,
+    post_status = excluded.post_status;
 
   -- ---- 8. バナー画像作成補助 / CLOSED / サムネあり ----
   insert into public.posts (
@@ -443,7 +524,17 @@ begin
     '5,000〜8,000円/点',
     now() - interval '30 days', now() - interval '10 days',
     'https://picsum.photos/seed/banner008/800/450'
-  ) on conflict (id) do nothing;
+  ) on conflict (id) do update set
+    company_id = excluded.company_id,
+    created_by_user_id = excluded.created_by_user_id,
+    title = excluded.title,
+    body = excluded.body,
+    post_type = excluded.post_type,
+    post_status = excluded.post_status,
+    price_text = excluded.price_text,
+    published_at = excluded.published_at,
+    closed_at = excluded.closed_at,
+    thumbnail_url = excluded.thumbnail_url;
 
   -- ==========================================================
   -- STEP 5: 気軽投稿（CASUAL）11件
@@ -466,7 +557,15 @@ begin
     'CASUAL', 'OPEN',
     now() - interval '2 days',
     'https://picsum.photos/seed/ui011/800/450'
-  ) on conflict (id) do nothing;
+  ) on conflict (id) do update set
+    company_id = excluded.company_id,
+    created_by_user_id = excluded.created_by_user_id,
+    title = excluded.title,
+    body = excluded.body,
+    post_type = excluded.post_type,
+    post_status = excluded.post_status,
+    published_at = excluded.published_at,
+    thumbnail_url = excluded.thumbnail_url;
 
   -- ---- cas2. Excel マクロ相談 / OPEN / user2 ----
   insert into public.posts (
@@ -478,7 +577,14 @@ begin
     E'毎月の集計作業をマクロで自動化しようとしていますが、ループ処理でエラーが出て詰まっています。VBA 経験者の方、少し見ていただけますか？',
     'CASUAL', 'OPEN',
     now() - interval '1 day'
-  ) on conflict (id) do nothing;
+  ) on conflict (id) do update set
+    company_id = excluded.company_id,
+    created_by_user_id = excluded.created_by_user_id,
+    title = excluded.title,
+    body = excluded.body,
+    post_type = excluded.post_type,
+    post_status = excluded.post_status,
+    published_at = excluded.published_at;
 
   -- ---- cas3. Figma デザイン壁打ち / DRAFT / user3 ----
   insert into public.posts (
@@ -490,7 +596,13 @@ begin
     E'Figma でデザインシステムを構築しようとしているのですが、コンポーネントの粒度や命名規則について相談相手を探しています。\n\n' ||
     E'※ まだ下書きです。',
     'CASUAL', 'DRAFT'
-  ) on conflict (id) do nothing;
+  ) on conflict (id) do update set
+    company_id = excluded.company_id,
+    created_by_user_id = excluded.created_by_user_id,
+    title = excluded.title,
+    body = excluded.body,
+    post_type = excluded.post_type,
+    post_status = excluded.post_status;
 
   -- ---- cas4. 社内向け資料の見せ方相談 / OPEN / adm1 ----
   insert into public.posts (
@@ -507,7 +619,14 @@ begin
     E'プレゼン経験豊富な方のご意見をお待ちしています！',
     'CASUAL', 'OPEN',
     now() - interval '3 days'
-  ) on conflict (id) do nothing;
+  ) on conflict (id) do update set
+    company_id = excluded.company_id,
+    created_by_user_id = excluded.created_by_user_id,
+    title = excluded.title,
+    body = excluded.body,
+    post_type = excluded.post_type,
+    post_status = excluded.post_status,
+    published_at = excluded.published_at;
 
   -- ---- cas5. Java 例外設計の相談 / OPEN / user4 ----
   insert into public.posts (
@@ -521,7 +640,14 @@ begin
     E'Java 歴 5 年以上の方や、DDD でのエラー設計経験がある方のご意見を聞かせてください。',
     'CASUAL', 'OPEN',
     now() - interval '4 days'
-  ) on conflict (id) do nothing;
+  ) on conflict (id) do update set
+    company_id = excluded.company_id,
+    created_by_user_id = excluded.created_by_user_id,
+    title = excluded.title,
+    body = excluded.body,
+    post_type = excluded.post_type,
+    post_status = excluded.post_status,
+    published_at = excluded.published_at;
 
   -- ---- cas6. PowerPoint 構成レビュー / CLOSED / user1 ----
   insert into public.posts (
@@ -535,7 +661,15 @@ begin
     E'本投稿は締め切りとさせていただきます。',
     'CASUAL', 'CLOSED',
     now() - interval '10 days', now() - interval '2 days'
-  ) on conflict (id) do nothing;
+  ) on conflict (id) do update set
+    company_id = excluded.company_id,
+    created_by_user_id = excluded.created_by_user_id,
+    title = excluded.title,
+    body = excluded.body,
+    post_type = excluded.post_type,
+    post_status = excluded.post_status,
+    published_at = excluded.published_at,
+    closed_at = excluded.closed_at;
 
   -- ---- cas7. ノーコードツール比較相談 / OPEN / サムネあり / user5 ----
   insert into public.posts (
@@ -550,7 +684,15 @@ begin
     'CASUAL', 'OPEN',
     now() - interval '1 day',
     'https://picsum.photos/seed/nocode017/800/450'
-  ) on conflict (id) do nothing;
+  ) on conflict (id) do update set
+    company_id = excluded.company_id,
+    created_by_user_id = excluded.created_by_user_id,
+    title = excluded.title,
+    body = excluded.body,
+    post_type = excluded.post_type,
+    post_status = excluded.post_status,
+    published_at = excluded.published_at,
+    thumbnail_url = excluded.thumbnail_url;
 
   -- ---- cas8. アンケート設問レビュー / OPEN / user3 ----
   insert into public.posts (
@@ -566,7 +708,14 @@ begin
     E'・オープン質問の数が多すぎないか',
     'CASUAL', 'OPEN',
     now() - interval '2 days'
-  ) on conflict (id) do nothing;
+  ) on conflict (id) do update set
+    company_id = excluded.company_id,
+    created_by_user_id = excluded.created_by_user_id,
+    title = excluded.title,
+    body = excluded.body,
+    post_type = excluded.post_type,
+    post_status = excluded.post_status,
+    published_at = excluded.published_at;
 
   -- ---- cas9. コーディングテストの見直し相談 / DRAFT / user2 ----
   insert into public.posts (
@@ -579,7 +728,13 @@ begin
     E'TypeScript / React を使ったより実践的な問題に改訂したいのですが、相談できる方いますか？\n\n' ||
     E'※ まだ下書き中です。',
     'CASUAL', 'DRAFT'
-  ) on conflict (id) do nothing;
+  ) on conflict (id) do update set
+    company_id = excluded.company_id,
+    created_by_user_id = excluded.created_by_user_id,
+    title = excluded.title,
+    body = excluded.body,
+    post_type = excluded.post_type,
+    post_status = excluded.post_status;
 
   -- ---- cas10. SaaS プライシング壁打ち / OPEN / adm2 ----
   insert into public.posts (
@@ -591,7 +746,14 @@ begin
     E'自社 SaaS のプランを見直し中です。フリーミアム vs サブスクの議論でもやもやしています。SaaS プライシングの経験がある方、30 分ほどお話しできますか？',
     'CASUAL', 'OPEN',
     now() - interval '6 hours'
-  ) on conflict (id) do nothing;
+  ) on conflict (id) do update set
+    company_id = excluded.company_id,
+    created_by_user_id = excluded.created_by_user_id,
+    title = excluded.title,
+    body = excluded.body,
+    post_type = excluded.post_type,
+    post_status = excluded.post_status,
+    published_at = excluded.published_at;
 
   -- ---- cas11. デザインシステム整備の壁打ち / OPEN / サムネあり / user1 ----
   insert into public.posts (
@@ -606,7 +768,15 @@ begin
     'CASUAL', 'OPEN',
     now() - interval '12 hours',
     'https://picsum.photos/seed/design021/800/450'
-  ) on conflict (id) do nothing;
+  ) on conflict (id) do update set
+    company_id = excluded.company_id,
+    created_by_user_id = excluded.created_by_user_id,
+    title = excluded.title,
+    body = excluded.body,
+    post_type = excluded.post_type,
+    post_status = excluded.post_status,
+    published_at = excluded.published_at,
+    thumbnail_url = excluded.thumbnail_url;
 
   -- ==========================================================
   -- STEP 5.5: 追加投稿 8件（ユーザー別・状態別確認用）
@@ -639,7 +809,22 @@ begin
     E'・SaaS 比較記事やサービス仕様の読み取りができる方\n' ||
     E'・ビジネス向けに要点を短くまとめられる方',
     'https://example.com/research/ai-meeting-tools'
-  ) on conflict (id) do nothing;
+  ) on conflict (id) do update set
+    company_id = excluded.company_id,
+    created_by_user_id = excluded.created_by_user_id,
+    title = excluded.title,
+    body = excluded.body,
+    post_type = excluded.post_type,
+    post_status = excluded.post_status,
+    price_text = excluded.price_text,
+    contact_person_name = excluded.contact_person_name,
+    deadline_at = excluded.deadline_at,
+    published_at = excluded.published_at,
+    thumbnail_url = excluded.thumbnail_url,
+    application_limit = excluded.application_limit,
+    is_application_limit_enabled = excluded.is_application_limit_enabled,
+    requirements = excluded.requirements,
+    reference_url = excluded.reference_url;
 
   -- ---- var2. adm2: 公開中の公式案件 / OPEN ----
   insert into public.posts (
@@ -662,7 +847,20 @@ begin
     3, true,
     E'・採用広報または編集経験\n' ||
     E'・読み手目線でフィードバックできる方'
-  ) on conflict (id) do nothing;
+  ) on conflict (id) do update set
+    company_id = excluded.company_id,
+    created_by_user_id = excluded.created_by_user_id,
+    title = excluded.title,
+    body = excluded.body,
+    post_type = excluded.post_type,
+    post_status = excluded.post_status,
+    price_text = excluded.price_text,
+    contact_person_name = excluded.contact_person_name,
+    deadline_at = excluded.deadline_at,
+    published_at = excluded.published_at,
+    application_limit = excluded.application_limit,
+    is_application_limit_enabled = excluded.is_application_limit_enabled,
+    requirements = excluded.requirements;
 
   -- ---- var3. adm3: 終了した公式案件 / CLOSED / サムネあり ----
   insert into public.posts (
@@ -679,7 +877,18 @@ begin
     '10,000円', '管理者C',
     now() - interval '45 days', now() - interval '20 days',
     'https://picsum.photos/seed/sales-doc-var103/800/450'
-  ) on conflict (id) do nothing;
+  ) on conflict (id) do update set
+    company_id = excluded.company_id,
+    created_by_user_id = excluded.created_by_user_id,
+    title = excluded.title,
+    body = excluded.body,
+    post_type = excluded.post_type,
+    post_status = excluded.post_status,
+    price_text = excluded.price_text,
+    contact_person_name = excluded.contact_person_name,
+    published_at = excluded.published_at,
+    closed_at = excluded.closed_at,
+    thumbnail_url = excluded.thumbnail_url;
 
   -- ---- var4. usr1: 公開中の気軽投稿 / OPEN / サムネあり ----
   insert into public.posts (
@@ -693,7 +902,15 @@ begin
     'CASUAL', 'OPEN',
     now() - interval '3 hours',
     'https://picsum.photos/seed/notion-portal-var104/800/450'
-  ) on conflict (id) do nothing;
+  ) on conflict (id) do update set
+    company_id = excluded.company_id,
+    created_by_user_id = excluded.created_by_user_id,
+    title = excluded.title,
+    body = excluded.body,
+    post_type = excluded.post_type,
+    post_status = excluded.post_status,
+    published_at = excluded.published_at,
+    thumbnail_url = excluded.thumbnail_url;
 
   -- ---- var5. usr2: 進行中の気軽投稿 / IN_PROGRESS ----
   insert into public.posts (
@@ -706,7 +923,14 @@ begin
     E'すでに相談相手は見つかっています（IN_PROGRESS 表示確認用）。',
     'CASUAL', 'IN_PROGRESS',
     now() - interval '2 days'
-  ) on conflict (id) do nothing;
+  ) on conflict (id) do update set
+    company_id = excluded.company_id,
+    created_by_user_id = excluded.created_by_user_id,
+    title = excluded.title,
+    body = excluded.body,
+    post_type = excluded.post_type,
+    post_status = excluded.post_status,
+    published_at = excluded.published_at;
 
   -- ---- var6. usr3: 終了した気軽投稿 / CLOSED ----
   insert into public.posts (
@@ -719,7 +943,15 @@ begin
     E'テーマが決まったため、CLOSED 表示確認用の投稿として残しています。',
     'CASUAL', 'CLOSED',
     now() - interval '18 days', now() - interval '6 days'
-  ) on conflict (id) do nothing;
+  ) on conflict (id) do update set
+    company_id = excluded.company_id,
+    created_by_user_id = excluded.created_by_user_id,
+    title = excluded.title,
+    body = excluded.body,
+    post_type = excluded.post_type,
+    post_status = excluded.post_status,
+    published_at = excluded.published_at,
+    closed_at = excluded.closed_at;
 
   -- ---- var7. usr4: 下書きの気軽投稿 / DRAFT ----
   insert into public.posts (
@@ -730,7 +962,13 @@ begin
     'プロダクト分析イベントの告知文を添削してほしい',
     E'イベント告知文の下書きを作っています。対象者、得られる学び、参加条件の見せ方を整理してから公開予定です。',
     'CASUAL', 'DRAFT'
-  ) on conflict (id) do nothing;
+  ) on conflict (id) do update set
+    company_id = excluded.company_id,
+    created_by_user_id = excluded.created_by_user_id,
+    title = excluded.title,
+    body = excluded.body,
+    post_type = excluded.post_type,
+    post_status = excluded.post_status;
 
   -- ---- var8. usr5: 公開中の気軽投稿 / OPEN / reference_url あり ----
   insert into public.posts (
@@ -744,7 +982,15 @@ begin
     'CASUAL', 'OPEN',
     now() - interval '8 hours',
     'https://example.com/team/task-management'
-  ) on conflict (id) do nothing;
+  ) on conflict (id) do update set
+    company_id = excluded.company_id,
+    created_by_user_id = excluded.created_by_user_id,
+    title = excluded.title,
+    body = excluded.body,
+    post_type = excluded.post_type,
+    post_status = excluded.post_status,
+    published_at = excluded.published_at,
+    reference_url = excluded.reference_url;
 
   -- ==========================================================
   -- STEP 6: applications 14件
@@ -770,7 +1016,17 @@ begin
     'APPLY', 'APPLIED',
     '佐藤 花子', 'user2@example.com', 'ゼロプライド株式会社',
     '経費精算レシートの整理・データ入力サポート', 1
-  ) on conflict (id) do nothing;
+  ) on conflict (id) do update set
+    post_id = excluded.post_id,
+    applicant_user_id = excluded.applicant_user_id,
+    message = excluded.message,
+    application_type = excluded.application_type,
+    application_status = excluded.application_status,
+    applicant_name_snapshot = excluded.applicant_name_snapshot,
+    applicant_email_snapshot = excluded.applicant_email_snapshot,
+    applicant_company_snapshot = excluded.applicant_company_snapshot,
+    post_title_snapshot = excluded.post_title_snapshot,
+    application_sequence = excluded.application_sequence;
 
   -- [2] user3 → p_off1 / INQUIRY / INQUIRY
   insert into public.applications (
@@ -785,7 +1041,17 @@ begin
     'INQUIRY', 'INQUIRY',
     '鈴木 一郎', 'user3@example.com', '株式会社ULTI-ME',
     '経費精算レシートの整理・データ入力サポート', 2
-  ) on conflict (id) do nothing;
+  ) on conflict (id) do update set
+    post_id = excluded.post_id,
+    applicant_user_id = excluded.applicant_user_id,
+    message = excluded.message,
+    application_type = excluded.application_type,
+    application_status = excluded.application_status,
+    applicant_name_snapshot = excluded.applicant_name_snapshot,
+    applicant_email_snapshot = excluded.applicant_email_snapshot,
+    applicant_company_snapshot = excluded.applicant_company_snapshot,
+    post_title_snapshot = excluded.post_title_snapshot,
+    application_sequence = excluded.application_sequence;
 
   -- [3] user4 → p_off3 / APPLY / REVIEWING
   insert into public.applications (
@@ -801,7 +1067,18 @@ begin
     '高橋 健太', 'user4@example.com', '株式会社T''s grace',
     'コーポレートサイトの軽微な修正・更新対応（複数名募集）', 1,
     now() - interval '1 day'
-  ) on conflict (id) do nothing;
+  ) on conflict (id) do update set
+    post_id = excluded.post_id,
+    applicant_user_id = excluded.applicant_user_id,
+    message = excluded.message,
+    application_type = excluded.application_type,
+    application_status = excluded.application_status,
+    applicant_name_snapshot = excluded.applicant_name_snapshot,
+    applicant_email_snapshot = excluded.applicant_email_snapshot,
+    applicant_company_snapshot = excluded.applicant_company_snapshot,
+    post_title_snapshot = excluded.post_title_snapshot,
+    application_sequence = excluded.application_sequence,
+    reviewed_at = excluded.reviewed_at;
 
   -- [4] user5 → p_off3 / APPLY / ACCEPTED
   insert into public.applications (
@@ -817,7 +1094,18 @@ begin
     '伊藤 美紀', 'user5@example.com', '株式会社TSHD',
     'コーポレートサイトの軽微な修正・更新対応（複数名募集）', 2,
     now() - interval '12 hours'
-  ) on conflict (id) do nothing;
+  ) on conflict (id) do update set
+    post_id = excluded.post_id,
+    applicant_user_id = excluded.applicant_user_id,
+    message = excluded.message,
+    application_type = excluded.application_type,
+    application_status = excluded.application_status,
+    applicant_name_snapshot = excluded.applicant_name_snapshot,
+    applicant_email_snapshot = excluded.applicant_email_snapshot,
+    applicant_company_snapshot = excluded.applicant_company_snapshot,
+    post_title_snapshot = excluded.post_title_snapshot,
+    application_sequence = excluded.application_sequence,
+    reviewed_at = excluded.reviewed_at;
 
   -- [5] user2 → p_off4 / APPLY / APPLIED
   insert into public.applications (
@@ -832,7 +1120,17 @@ begin
     'APPLY', 'APPLIED',
     '佐藤 花子', 'user2@example.com', 'ゼロプライド株式会社',
     '顧客アンケート結果の集計・レポート作成', 1
-  ) on conflict (id) do nothing;
+  ) on conflict (id) do update set
+    post_id = excluded.post_id,
+    applicant_user_id = excluded.applicant_user_id,
+    message = excluded.message,
+    application_type = excluded.application_type,
+    application_status = excluded.application_status,
+    applicant_name_snapshot = excluded.applicant_name_snapshot,
+    applicant_email_snapshot = excluded.applicant_email_snapshot,
+    applicant_company_snapshot = excluded.applicant_company_snapshot,
+    post_title_snapshot = excluded.post_title_snapshot,
+    application_sequence = excluded.application_sequence;
 
   -- [6] user1 → p_off6 / APPLY / APPLIED
   insert into public.applications (
@@ -847,7 +1145,17 @@ begin
     'APPLY', 'APPLIED',
     '田中 太郎', 'user1@example.com', 'T''s agency holdings',
     '名刺データ入力・顧客マスタ整備サポート（5名募集）', 1
-  ) on conflict (id) do nothing;
+  ) on conflict (id) do update set
+    post_id = excluded.post_id,
+    applicant_user_id = excluded.applicant_user_id,
+    message = excluded.message,
+    application_type = excluded.application_type,
+    application_status = excluded.application_status,
+    applicant_name_snapshot = excluded.applicant_name_snapshot,
+    applicant_email_snapshot = excluded.applicant_email_snapshot,
+    applicant_company_snapshot = excluded.applicant_company_snapshot,
+    post_title_snapshot = excluded.post_title_snapshot,
+    application_sequence = excluded.application_sequence;
 
   -- [7] user3 → p_off6 / APPLY / APPLIED
   insert into public.applications (
@@ -862,7 +1170,17 @@ begin
     'APPLY', 'APPLIED',
     '鈴木 一郎', 'user3@example.com', '株式会社ULTI-ME',
     '名刺データ入力・顧客マスタ整備サポート（5名募集）', 2
-  ) on conflict (id) do nothing;
+  ) on conflict (id) do update set
+    post_id = excluded.post_id,
+    applicant_user_id = excluded.applicant_user_id,
+    message = excluded.message,
+    application_type = excluded.application_type,
+    application_status = excluded.application_status,
+    applicant_name_snapshot = excluded.applicant_name_snapshot,
+    applicant_email_snapshot = excluded.applicant_email_snapshot,
+    applicant_company_snapshot = excluded.applicant_company_snapshot,
+    post_title_snapshot = excluded.post_title_snapshot,
+    application_sequence = excluded.application_sequence;
 
   -- [8] user2 → p_cas1 / APPLY / APPLIED（user1 の投稿に user2 が応募）
   insert into public.applications (
@@ -877,7 +1195,17 @@ begin
     'APPLY', 'APPLIED',
     '佐藤 花子', 'user2@example.com', 'ゼロプライド株式会社',
     '新機能のダッシュボード UI をレビューしてもらえませんか？', 1
-  ) on conflict (id) do nothing;
+  ) on conflict (id) do update set
+    post_id = excluded.post_id,
+    applicant_user_id = excluded.applicant_user_id,
+    message = excluded.message,
+    application_type = excluded.application_type,
+    application_status = excluded.application_status,
+    applicant_name_snapshot = excluded.applicant_name_snapshot,
+    applicant_email_snapshot = excluded.applicant_email_snapshot,
+    applicant_company_snapshot = excluded.applicant_company_snapshot,
+    post_title_snapshot = excluded.post_title_snapshot,
+    application_sequence = excluded.application_sequence;
 
   -- [9] user3 → p_cas1 / INQUIRY / INQUIRY
   insert into public.applications (
@@ -892,7 +1220,17 @@ begin
     'INQUIRY', 'INQUIRY',
     '鈴木 一郎', 'user3@example.com', '株式会社ULTI-ME',
     '新機能のダッシュボード UI をレビューしてもらえませんか？', 2
-  ) on conflict (id) do nothing;
+  ) on conflict (id) do update set
+    post_id = excluded.post_id,
+    applicant_user_id = excluded.applicant_user_id,
+    message = excluded.message,
+    application_type = excluded.application_type,
+    application_status = excluded.application_status,
+    applicant_name_snapshot = excluded.applicant_name_snapshot,
+    applicant_email_snapshot = excluded.applicant_email_snapshot,
+    applicant_company_snapshot = excluded.applicant_company_snapshot,
+    post_title_snapshot = excluded.post_title_snapshot,
+    application_sequence = excluded.application_sequence;
 
   -- [10] user4 → p_cas2 / APPLY / APPLIED
   insert into public.applications (
@@ -907,7 +1245,17 @@ begin
     'APPLY', 'APPLIED',
     '高橋 健太', 'user4@example.com', '株式会社T''s grace',
     'Excel の VBA マクロについて相談したい', 1
-  ) on conflict (id) do nothing;
+  ) on conflict (id) do update set
+    post_id = excluded.post_id,
+    applicant_user_id = excluded.applicant_user_id,
+    message = excluded.message,
+    application_type = excluded.application_type,
+    application_status = excluded.application_status,
+    applicant_name_snapshot = excluded.applicant_name_snapshot,
+    applicant_email_snapshot = excluded.applicant_email_snapshot,
+    applicant_company_snapshot = excluded.applicant_company_snapshot,
+    post_title_snapshot = excluded.post_title_snapshot,
+    application_sequence = excluded.application_sequence;
 
   -- [11] user1 → p_cas5 / INQUIRY / INQUIRY
   insert into public.applications (
@@ -922,7 +1270,17 @@ begin
     'INQUIRY', 'INQUIRY',
     '田中 太郎', 'user1@example.com', 'T''s agency holdings',
     'Java 例外設計について壁打ちしてほしい', 1
-  ) on conflict (id) do nothing;
+  ) on conflict (id) do update set
+    post_id = excluded.post_id,
+    applicant_user_id = excluded.applicant_user_id,
+    message = excluded.message,
+    application_type = excluded.application_type,
+    application_status = excluded.application_status,
+    applicant_name_snapshot = excluded.applicant_name_snapshot,
+    applicant_email_snapshot = excluded.applicant_email_snapshot,
+    applicant_company_snapshot = excluded.applicant_company_snapshot,
+    post_title_snapshot = excluded.post_title_snapshot,
+    application_sequence = excluded.application_sequence;
 
   -- [12] user5 → p_cas4 / APPLY / APPLIED
   insert into public.applications (
@@ -937,7 +1295,17 @@ begin
     'APPLY', 'APPLIED',
     '伊藤 美紀', 'user5@example.com', '株式会社TSHD',
     '経営会議向け資料の構成・見せ方について相談したい', 1
-  ) on conflict (id) do nothing;
+  ) on conflict (id) do update set
+    post_id = excluded.post_id,
+    applicant_user_id = excluded.applicant_user_id,
+    message = excluded.message,
+    application_type = excluded.application_type,
+    application_status = excluded.application_status,
+    applicant_name_snapshot = excluded.applicant_name_snapshot,
+    applicant_email_snapshot = excluded.applicant_email_snapshot,
+    applicant_company_snapshot = excluded.applicant_company_snapshot,
+    post_title_snapshot = excluded.post_title_snapshot,
+    application_sequence = excluded.application_sequence;
 
   -- [13] user2 → p_cas7 / APPLY / APPLIED
   insert into public.applications (
@@ -952,7 +1320,17 @@ begin
     'APPLY', 'APPLIED',
     '佐藤 花子', 'user2@example.com', 'ゼロプライド株式会社',
     'ノーコードツール選定の相談に乗ってほしい', 1
-  ) on conflict (id) do nothing;
+  ) on conflict (id) do update set
+    post_id = excluded.post_id,
+    applicant_user_id = excluded.applicant_user_id,
+    message = excluded.message,
+    application_type = excluded.application_type,
+    application_status = excluded.application_status,
+    applicant_name_snapshot = excluded.applicant_name_snapshot,
+    applicant_email_snapshot = excluded.applicant_email_snapshot,
+    applicant_company_snapshot = excluded.applicant_company_snapshot,
+    post_title_snapshot = excluded.post_title_snapshot,
+    application_sequence = excluded.application_sequence;
 
   -- [14] user4 → p_cas8 / INQUIRY / INQUIRY
   insert into public.applications (
@@ -967,7 +1345,17 @@ begin
     'INQUIRY', 'INQUIRY',
     '高橋 健太', 'user4@example.com', '株式会社T''s grace',
     'ユーザーアンケートの設問設計をレビューしてほしい', 1
-  ) on conflict (id) do nothing;
+  ) on conflict (id) do update set
+    post_id = excluded.post_id,
+    applicant_user_id = excluded.applicant_user_id,
+    message = excluded.message,
+    application_type = excluded.application_type,
+    application_status = excluded.application_status,
+    applicant_name_snapshot = excluded.applicant_name_snapshot,
+    applicant_email_snapshot = excluded.applicant_email_snapshot,
+    applicant_company_snapshot = excluded.applicant_company_snapshot,
+    post_title_snapshot = excluded.post_title_snapshot,
+    application_sequence = excluded.application_sequence;
 
   -- ==========================================================
   -- STEP 7: mobile future feature samples
@@ -982,19 +1370,32 @@ begin
     ('ee000001-0000-0000-0000-000000000000', usr1, p_off3, now() - interval '2 days'),
     ('ee000002-0000-0000-0000-000000000000', usr1, p_cas1, now() - interval '1 day'),
     ('ee000003-0000-0000-0000-000000000000', usr2, p_off1, now() - interval '6 hours')
-  on conflict (id) do nothing;
+  on conflict (id) do update set
+    user_id = excluded.user_id,
+    post_id = excluded.post_id,
+    created_at = excluded.created_at;
 
   insert into public.post_view_logs (id, post_id, user_id, ip_hash, user_agent, viewed_at) values
     ('ef000001-0000-0000-0000-000000000000', p_off1, usr1, 'dev-user1-view-1', 'dev-mobile-safari', now() - interval '3 hours'),
     ('ef000002-0000-0000-0000-000000000000', p_off3, usr1, 'dev-user1-view-2', 'dev-mobile-safari', now() - interval '40 minutes'),
     ('ef000003-0000-0000-0000-000000000000', p_cas1, usr2, 'dev-user2-view-1', 'dev-android-chrome', now() - interval '20 minutes')
-  on conflict (id) do nothing;
+  on conflict (id) do update set
+    post_id = excluded.post_id,
+    user_id = excluded.user_id,
+    ip_hash = excluded.ip_hash,
+    user_agent = excluded.user_agent,
+    viewed_at = excluded.viewed_at;
 
   insert into public.application_messages (id, application_id, sender_user_id, body, is_read, created_at) values
     ('f1000001-0000-0000-0000-000000000000', 'dd000002-0000-0000-0000-000000000000', usr3, 'Dev inquiry follow-up message for mobile unread/reply state.', true, now() - interval '2 hours'),
     ('f1000002-0000-0000-0000-000000000000', 'dd000002-0000-0000-0000-000000000000', adm1, 'Dev admin reply for mobile reply indicator.', false, now() - interval '30 minutes'),
     ('f1000003-0000-0000-0000-000000000000', 'dd000003-0000-0000-0000-000000000000', adm1, 'Dev review message for application detail.', false, now() - interval '20 minutes')
-  on conflict (id) do nothing;
+  on conflict (id) do update set
+    application_id = excluded.application_id,
+    sender_user_id = excluded.sender_user_id,
+    body = excluded.body,
+    is_read = excluded.is_read,
+    created_at = excluded.created_at;
 
   insert into public.notifications (
     id, user_id, type, title, body, related_type, related_id, is_read, read_at, created_at
@@ -1035,7 +1436,16 @@ begin
       now() - interval '10 minutes',
       now() - interval '1 hour'
     )
-  on conflict (id) do nothing;
+  on conflict (id) do update set
+    user_id = excluded.user_id,
+    type = excluded.type,
+    title = excluded.title,
+    body = excluded.body,
+    related_type = excluded.related_type,
+    related_id = excluded.related_id,
+    is_read = excluded.is_read,
+    read_at = excluded.read_at,
+    created_at = excluded.created_at;
 
   insert into public.notification_settings (id, user_id, event_type, in_app, email) values
     ('f3000001-0000-0000-0000-000000000000', usr1, 'MESSAGE_RECEIVED', true, true),
@@ -1072,7 +1482,15 @@ begin
     (wt_co1, co1, '社内ランチおすすめ',
      'オフィス周辺やテレワーク中のおすすめランチを共有しよう。',
      current_date, current_date + 6, true, 0, adm1)
-  on conflict (id) do nothing;
+  on conflict (id) do update set
+    company_id = excluded.company_id,
+    title = excluded.title,
+    description = excluded.description,
+    starts_on = excluded.starts_on,
+    ends_on = excluded.ends_on,
+    is_active = excluded.is_active,
+    sort_order = excluded.sort_order,
+    created_by = excluded.created_by;
 
   -- ---- 8-1. タグ ----
   insert into public.community_post_tags (id, name, slug) values
@@ -1080,7 +1498,9 @@ begin
     (tag2, 'ツール',     'tools'),
     (tag3, '雑談',       'chat'),
     (tag4, 'お知らせ',   'announce')
-  on conflict (id) do nothing;
+  on conflict (id) do update set
+    name = excluded.name,
+    slug = excluded.slug;
 
   -- ---- 8-2. 投稿（ORIGINAL） ----
 
@@ -1092,7 +1512,15 @@ begin
      E'今週のテーマ「便利だったショートカット」便乗です。\n' ||
      E'Windowsの「Win + V」でクリップボード履歴が出るの、最近知って世界変わりました。コピペ往復が激減します🙌',
      'COMPANY', 'ORIGINAL', 'INTERNAL', theme_global, now() - interval '5 hours')
-  on conflict (id) do nothing;
+  on conflict (id) do update set
+    company_id = excluded.company_id,
+    author_user_id = excluded.author_user_id,
+    body = excluded.body,
+    visibility = excluded.visibility,
+    post_kind = excluded.post_kind,
+    source_kind = excluded.source_kind,
+    weekly_theme_id = excluded.weekly_theme_id,
+    created_at = excluded.created_at;
 
   -- cp2: adm1 / 全社お知らせ
   insert into public.community_posts
@@ -1101,7 +1529,14 @@ begin
     (cp2, co1, adm1,
      E'【お知らせ】来週の全社定例は水曜10:00からに変更します。アジェンダは前日までに共有予定です。よろしくお願いします。',
      'COMPANY', 'ORIGINAL', 'INTERNAL', now() - interval '8 hours')
-  on conflict (id) do nothing;
+  on conflict (id) do update set
+    company_id = excluded.company_id,
+    author_user_id = excluded.author_user_id,
+    body = excluded.body,
+    visibility = excluded.visibility,
+    post_kind = excluded.post_kind,
+    source_kind = excluded.source_kind,
+    created_at = excluded.created_at;
 
   -- cp3: usr1 / タグ付き投稿
   insert into public.community_posts
@@ -1111,7 +1546,14 @@ begin
      E'議事録の自動文字起こし、ツールを乗り換えたら精度がかなり上がりました。\n' ||
      E'同じように探している人いたら共有するので声かけてください。',
      'COMPANY', 'ORIGINAL', 'INTERNAL', now() - interval '1 day 2 hours')
-  on conflict (id) do nothing;
+  on conflict (id) do update set
+    company_id = excluded.company_id,
+    author_user_id = excluded.author_user_id,
+    body = excluded.body,
+    visibility = excluded.visibility,
+    post_kind = excluded.post_kind,
+    source_kind = excluded.source_kind,
+    created_at = excluded.created_at;
 
   -- cp7: usr1 / PRIVATE（本人のみ閲覧。公開範囲の確認用）
   insert into public.community_posts
@@ -1120,7 +1562,14 @@ begin
     (cp7, co1, usr1,
      E'（自分用メモ）来月の勉強会ネタ候補: ショートカット集 / 議事録ツール比較 / Notion整理術',
      'PRIVATE', 'ORIGINAL', 'INTERNAL', now() - interval '30 minutes')
-  on conflict (id) do nothing;
+  on conflict (id) do update set
+    company_id = excluded.company_id,
+    author_user_id = excluded.author_user_id,
+    body = excluded.body,
+    visibility = excluded.visibility,
+    post_kind = excluded.post_kind,
+    source_kind = excluded.source_kind,
+    created_at = excluded.created_at;
 
   -- cp8: usr1 / 会社別テーマ（社内ランチ）に沿った投稿
   insert into public.community_posts
@@ -1129,7 +1578,15 @@ begin
     (cp8, co1, usr1,
      E'テーマ「社内ランチおすすめ」！オフィス裏の定食屋、日替わり800円で味噌汁おかわり自由です。早めに行かないと並びます🍚',
      'COMPANY', 'ORIGINAL', 'INTERNAL', wt_co1, now() - interval '3 hours')
-  on conflict (id) do nothing;
+  on conflict (id) do update set
+    company_id = excluded.company_id,
+    author_user_id = excluded.author_user_id,
+    body = excluded.body,
+    visibility = excluded.visibility,
+    post_kind = excluded.post_kind,
+    source_kind = excluded.source_kind,
+    weekly_theme_id = excluded.weekly_theme_id,
+    created_at = excluded.created_at;
 
   -- ---- 8-3. 社外SNS取込（external_drafts → EXTERNAL_IMPORT 投稿） ----
 
@@ -1141,7 +1598,15 @@ begin
      E'【プレスリリース】当社の新サービスが公開されました🎉 社外向け発信を社内にも共有します。詳細は元記事をご覧ください。',
      'COMPANY', 'ORIGINAL', 'EXTERNAL_IMPORT',
      'https://example.com/news/new-service-launch', now() - interval '6 hours')
-  on conflict (id) do nothing;
+  on conflict (id) do update set
+    company_id = excluded.company_id,
+    author_user_id = excluded.author_user_id,
+    body = excluded.body,
+    visibility = excluded.visibility,
+    post_kind = excluded.post_kind,
+    source_kind = excluded.source_kind,
+    source_url = excluded.source_url,
+    created_at = excluded.created_at;
 
   -- external_drafts: PUBLISHED（cp6 として公開済）
   insert into public.community_external_drafts
@@ -1156,7 +1621,18 @@ begin
      'Example News',
      E'【プレスリリース】当社の新サービスが公開されました🎉',
      'PUBLISHED', cp6, now() - interval '6 hours')
-  on conflict (id) do nothing;
+  on conflict (id) do update set
+    company_id = excluded.company_id,
+    created_by = excluded.created_by,
+    source_url = excluded.source_url,
+    og_title = excluded.og_title,
+    og_description = excluded.og_description,
+    og_image_url = excluded.og_image_url,
+    og_site_name = excluded.og_site_name,
+    draft_body = excluded.draft_body,
+    status = excluded.status,
+    published_post_id = excluded.published_post_id,
+    fetched_at = excluded.fetched_at;
 
   -- external_drafts: DRAFT（未公開・下書きのまま。取込→公開前の状態確認用）
   insert into public.community_external_drafts
@@ -1171,7 +1647,17 @@ begin
      'Example Blog',
      E'参考になりそうな記事を見つけたので共有用に下書きしています。',
      'DRAFT', now() - interval '2 hours')
-  on conflict (id) do nothing;
+  on conflict (id) do update set
+    company_id = excluded.company_id,
+    created_by = excluded.created_by,
+    source_url = excluded.source_url,
+    og_title = excluded.og_title,
+    og_description = excluded.og_description,
+    og_image_url = excluded.og_image_url,
+    og_site_name = excluded.og_site_name,
+    draft_body = excluded.draft_body,
+    status = excluded.status,
+    fetched_at = excluded.fetched_at;
 
   -- ---- 8-4. 引用（QUOTE）／リポスト（REPOST） ----
   --   repost_of_id 先のカウンタは 022 トリガーが自動更新する
@@ -1183,7 +1669,15 @@ begin
     (cp4, co1, adm1,
      E'これ便利ですね！全社で共有したい小ワザです。みんなのおすすめショートカットもこのスレに集めましょう。',
      'COMPANY', 'QUOTE', cp1, 'INTERNAL', now() - interval '4 hours')
-  on conflict (id) do nothing;
+  on conflict (id) do update set
+    company_id = excluded.company_id,
+    author_user_id = excluded.author_user_id,
+    body = excluded.body,
+    visibility = excluded.visibility,
+    post_kind = excluded.post_kind,
+    repost_of_id = excluded.repost_of_id,
+    source_kind = excluded.source_kind,
+    created_at = excluded.created_at;
 
   -- cp5: usr1 が cp2 をリポスト（REPOST: body 空）
   insert into public.community_posts
@@ -1191,7 +1685,15 @@ begin
   values
     (cp5, co1, usr1,
      '', 'COMPANY', 'REPOST', cp2, 'INTERNAL', now() - interval '7 hours')
-  on conflict (id) do nothing;
+  on conflict (id) do update set
+    company_id = excluded.company_id,
+    author_user_id = excluded.author_user_id,
+    body = excluded.body,
+    visibility = excluded.visibility,
+    post_kind = excluded.post_kind,
+    repost_of_id = excluded.repost_of_id,
+    source_kind = excluded.source_kind,
+    created_at = excluded.created_at;
 
   -- ---- 8-5. co2（ゼロプライド株式会社）側のフィード ----
 
@@ -1201,7 +1703,15 @@ begin
     (cp11, co2, usr2,
      E'「便利だったショートカット」テーマ便乗。Slackの「Ctrl + K」でチャンネル即移動、地味に毎日使ってます。',
      'COMPANY', 'ORIGINAL', 'INTERNAL', theme_global, now() - interval '6 hours')
-  on conflict (id) do nothing;
+  on conflict (id) do update set
+    company_id = excluded.company_id,
+    author_user_id = excluded.author_user_id,
+    body = excluded.body,
+    visibility = excluded.visibility,
+    post_kind = excluded.post_kind,
+    source_kind = excluded.source_kind,
+    weekly_theme_id = excluded.weekly_theme_id,
+    created_at = excluded.created_at;
 
   insert into public.community_posts
     (id, company_id, author_user_id, body, visibility, post_kind, source_kind, created_at)
@@ -1209,14 +1719,29 @@ begin
     (cp12, co2, adm2,
      E'【お知らせ】社内SNSの運用を今日から開始しました。気軽に投稿・リアクションしてみてください！',
      'COMPANY', 'ORIGINAL', 'INTERNAL', now() - interval '1 day')
-  on conflict (id) do nothing;
+  on conflict (id) do update set
+    company_id = excluded.company_id,
+    author_user_id = excluded.author_user_id,
+    body = excluded.body,
+    visibility = excluded.visibility,
+    post_kind = excluded.post_kind,
+    source_kind = excluded.source_kind,
+    created_at = excluded.created_at;
 
   insert into public.community_posts
     (id, company_id, author_user_id, body, visibility, post_kind, repost_of_id, source_kind, created_at)
   values
     (cp13, co2, usr2,
      '', 'COMPANY', 'REPOST', cp12, 'INTERNAL', now() - interval '20 hours')
-  on conflict (id) do nothing;
+  on conflict (id) do update set
+    company_id = excluded.company_id,
+    author_user_id = excluded.author_user_id,
+    body = excluded.body,
+    visibility = excluded.visibility,
+    post_kind = excluded.post_kind,
+    repost_of_id = excluded.repost_of_id,
+    source_kind = excluded.source_kind,
+    created_at = excluded.created_at;
 
   -- ---- 8-6. タグ紐付け（relations） ----
   insert into public.community_post_tag_relations (post_id, tag_id) values
@@ -1245,7 +1770,11 @@ begin
     ('6d000011-0000-0000-0000-000000000000', cp11, adm2, 'LIKE',  now() - interval '5 hours'),
     ('6d000012-0000-0000-0000-000000000000', cp11, adm2, 'CLAP',  now() - interval '5 hours'),
     ('6d000013-0000-0000-0000-000000000000', cp12, usr2, 'LIKE',  now() - interval '22 hours')
-  on conflict (id) do nothing;
+  on conflict (id) do update set
+    post_id = excluded.post_id,
+    user_id = excluded.user_id,
+    reaction = excluded.reaction,
+    created_at = excluded.created_at;
 
   -- ---- 8-8. コメント（通常 + 1段返信） ----
   --   022 が comment_count を同期。返信は parent 投入後に挿入。
@@ -1256,14 +1785,24 @@ begin
     (cm2, cp1, usr1, null, E'ぜひ！定型文の貼り付けが多い人ほど効きます。', now() - interval '3 hours'),
     (cm4, cp3, adm1, null, E'気になります。今度おすすめのツール教えてください。', now() - interval '23 hours'),
     (cm5, cp11, adm2, null, E'Ctrl + K 便利ですよね。チャンネル名うろ覚えでも飛べるのが助かります。', now() - interval '5 hours 30 minutes')
-  on conflict (id) do nothing;
+  on conflict (id) do update set
+    post_id = excluded.post_id,
+    author_user_id = excluded.author_user_id,
+    parent_comment_id = excluded.parent_comment_id,
+    body = excluded.body,
+    created_at = excluded.created_at;
 
   -- cm3: cm1 への返信（親が存在してから挿入）
   insert into public.community_post_comments
     (id, post_id, author_user_id, parent_comment_id, body, created_at)
   values
     (cm3, cp1, usr1, cm1, E'お役に立てて良かったです！Macだと「Cmd + Shift + V」が近いです。', now() - interval '2 hours 50 minutes')
-  on conflict (id) do nothing;
+  on conflict (id) do update set
+    post_id = excluded.post_id,
+    author_user_id = excluded.author_user_id,
+    parent_comment_id = excluded.parent_comment_id,
+    body = excluded.body,
+    created_at = excluded.created_at;
 
   -- ---- 8-9. 通報（モデレーション確認用） ----
   insert into public.community_post_reports
@@ -1272,7 +1811,13 @@ begin
     (rp1, cp6, usr1, 'OTHER',
      E'社外発信の取込ですが、掲載可否の確認が取れているか念のため確認したいです。',
      'PENDING', now() - interval '1 hour')
-  on conflict (id) do nothing;
+  on conflict (id) do update set
+    post_id = excluded.post_id,
+    reported_by = excluded.reported_by,
+    reason = excluded.reason,
+    detail = excluded.detail,
+    status = excluded.status,
+    created_at = excluded.created_at;
 
   raise notice '===========================================';
   raise notice '002_seed_dev.sql の投入が完了しました。';
