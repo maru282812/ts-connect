@@ -390,17 +390,9 @@ export function PostsPageClient({
       </div>
 
       {/* ============================================================
-          フローティング投稿ボタン (モバイルのみ)
+          モバイルの投稿導線はボトムタブバー中央の「＋」に一本化したため、
+          ここでのフローティング投稿ボタンは廃止（下タブと重複するため）。
       ============================================================ */}
-      {newPostHref && (
-        <Link
-          href={newPostHref}
-          className="fixed bottom-6 right-4 z-30 md:hidden w-14 h-14 bg-primary text-white rounded-full shadow-lg flex items-center justify-center hover:bg-primary/90 active:scale-95 transition-transform"
-          aria-label="気軽に投稿"
-        >
-          <PlusIcon />
-        </Link>
-      )}
 
       {/* ============================================================
           案件詳細ドロワー (右からスライド)
