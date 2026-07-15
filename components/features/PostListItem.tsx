@@ -9,6 +9,8 @@ interface PostListItemProps {
   isSelected: boolean;
   onClick: () => void;
   appliedTypes?: Set<ApplicationType>;
+  isLiked?: boolean;
+  onToggleLike?: () => void;
 }
 
 export function PostListItem({
@@ -16,6 +18,8 @@ export function PostListItem({
   isSelected,
   onClick,
   appliedTypes,
+  isLiked = false,
+  onToggleLike,
 }: PostListItemProps) {
   const isOfficial = post.post_type === "OFFICIAL";
   const deadline = post.deadline_at
@@ -29,9 +33,18 @@ export function PostListItem({
   const [imgError, setImgError] = useState(false);
 
   return (
-    <button
-      type="button"
+    // biome-ignore lint/a11y/useSemanticElements: いいねボタンを内包するため button ではなく role=button の div を使用（button の入れ子は不正）
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.target !== e.currentTarget) return;
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick();
+        }
+      }}
       className={`
         flex flex-col rounded-lg cursor-pointer overflow-hidden select-none text-left w-full
         transition-all duration-200
@@ -124,6 +137,32 @@ export function PostListItem({
           </div>
         </div>
 
+        {/* 社内SNS風エンゲージメント: いいね(押せる) → その右に閲覧数 */}
+        <div className="flex items-center gap-4 text-slate-500">
+          <button
+            type="button"
+            aria-pressed={isLiked}
+            aria-label={isLiked ? "いいねを取り消す" : "いいね"}
+            disabled={!onToggleLike}
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleLike?.();
+            }}
+            className={`flex items-center gap-1 text-xs rounded-full px-1.5 py-0.5 -ml-1.5 transition-colors ${
+              isLiked
+                ? "text-rose-500 hover:bg-rose-50"
+                : "text-slate-500 hover:bg-slate-100 hover:text-rose-500"
+            }`}
+          >
+            <HeartIcon filled={isLiked} />
+            {post.like_count ?? 0}
+          </button>
+          <span className="flex items-center gap-1 text-xs">
+            <EyeIcon />
+            {post.view_count ?? 0}
+          </span>
+        </div>
+
         {/* 応募済みバッジ */}
         {appliedTypes && appliedTypes.size > 0 && (
           <div className="flex flex-wrap gap-1.5">
@@ -140,6 +179,49 @@ export function PostListItem({
           </div>
         )}
       </div>
-    </button>
+    </div>
+  );
+}
+
+function HeartIcon({ filled = false }: { filled?: boolean }) {
+  return (
+    <svg
+      className="h-4 w-4"
+      fill={filled ? "currentColor" : "none"}
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      strokeWidth={1.8}
+      aria-hidden="true"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
+      />
+    </svg>
+  );
+}
+
+function EyeIcon() {
+  return (
+    <svg
+      className="h-4 w-4"
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      strokeWidth={1.8}
+      aria-hidden="true"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z"
+      />
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+      />
+    </svg>
   );
 }

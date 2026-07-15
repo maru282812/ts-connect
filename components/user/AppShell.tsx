@@ -3,12 +3,34 @@
 import { Button } from "@heroui/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 import { GlobalSearch } from "@/components/common/GlobalSearch";
 import { SidebarNavigation } from "@/components/common/SidebarNavigation";
 import { BottomTabBar } from "@/components/user/BottomTabBar";
+import { NotificationBell } from "@/components/user/NotificationBell";
 import { APP_NAME } from "@/constants/appConstants";
 import { getSidebarGroups } from "@/constants/navigationParts";
 import { signOut } from "@/lib/auth/actions";
+
+function HelpIcon() {
+  return (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="10" />
+      <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+      <line x1="12" y1="17" x2="12.01" y2="17" />
+    </svg>
+  );
+}
 
 const userSidebarGroups = getSidebarGroups({
   surface: "user",
@@ -25,6 +47,22 @@ interface AppShellProps {
 export function AppShell({ displayName, email, children }: AppShellProps) {
   const pathname = usePathname();
 
+  // 「今後実装予定」トースト。通知/ヘルプは導線だけ用意し、実体は未実装。
+  const [comingSoon, setComingSoon] = useState<string | null>(null);
+  const comingSoonTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showComingSoon = (label: string) => {
+    setComingSoon(`${label}は今後実装予定です`);
+    if (comingSoonTimer.current) clearTimeout(comingSoonTimer.current);
+    comingSoonTimer.current = setTimeout(() => setComingSoon(null), 2400);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (comingSoonTimer.current) clearTimeout(comingSoonTimer.current);
+    };
+  }, []);
+
   return (
     <div className="flex h-screen flex-col bg-blue-50">
       <header className="z-40 flex h-16 shrink-0 items-center justify-between gap-3 border-b border-default-100 bg-white px-4 md:px-8">
@@ -36,9 +74,20 @@ export function AppShell({ displayName, email, children }: AppShellProps) {
           <GlobalSearch surface="user" />
         </div>
 
-        <div className="flex shrink-0 items-center gap-2 md:gap-4">
+        <div className="flex shrink-0 items-center gap-1 md:gap-2">
           {/* ポイント表示は第1弾リリースでは非表示（memory/release_scope_phase1.md） */}
-          {/* 通知ベルは通知機能が入るまで保留（実体のないダミー導線を作らない） */}
+
+          {/* 通知ベル：未読バッジ＋ドロップダウン。タップで該当箇所へ遷移。 */}
+          <NotificationBell />
+
+          <button
+            type="button"
+            onClick={() => showComingSoon("ヘルプ")}
+            className="hidden rounded-full p-2 text-default-500 transition-colors hover:bg-default-100 sm:flex"
+            aria-label="ヘルプ"
+          >
+            <HelpIcon />
+          </button>
 
           <Link
             href="/app/settings"
@@ -92,6 +141,18 @@ export function AppShell({ displayName, email, children }: AppShellProps) {
 
       {/* モバイル用ボトムタブ（md:hidden）。PCは上のサイドバーがナビ。 */}
       <BottomTabBar />
+
+      {/* 「今後実装予定」トースト（通知/ヘルプ用の一時表示） */}
+      {comingSoon && (
+        <div
+          role="status"
+          className="fixed inset-x-0 bottom-24 z-50 flex justify-center px-4 md:bottom-8"
+        >
+          <div className="rounded-full bg-default-900/90 px-4 py-2 text-sm font-medium text-white shadow-lg">
+            {comingSoon}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

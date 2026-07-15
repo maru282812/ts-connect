@@ -94,6 +94,24 @@ export function CommunityFeedClient() {
   // タイムラインのタブ（すべて / 自分宛て）
   const [feedTab, setFeedTab] = useState<"all" | "mine">("all");
 
+  // 通知ベルからの遷移: ?highlight=<postId> の投稿へスクロールして一時強調
+  const didHighlight = useRef(false);
+  useEffect(() => {
+    if (isLoading || didHighlight.current) return;
+    const id = new URLSearchParams(window.location.search).get("highlight");
+    if (!id) return;
+    const el = document.getElementById(`community-post-${id}`);
+    if (!el) return;
+    didHighlight.current = true;
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    el.classList.add("ring-2", "ring-primary", "ring-offset-2");
+    const t = setTimeout(
+      () => el.classList.remove("ring-2", "ring-primary", "ring-offset-2"),
+      2600,
+    );
+    return () => clearTimeout(t);
+  }, [isLoading]);
+
   const addTag = (raw: string) => {
     const t = normalizeTagName(raw);
     if (!t) return;

@@ -27,10 +27,11 @@
 --     user5@example.com   （伊藤 美紀 / 株式会社TSHD）
 --
 -- 注意:
---   auth.users への直接 INSERT はローカル Supabase 開発環境でのみ動作する。
---   本番 Supabase（cloud）では auth.users への直接 INSERT は不可のため、
---   先に Supabase Auth でユーザーを作成してから、
---   STEP 2 の public.users UPSERT のみを実行してください。
+--   auth.users への直接 INSERT はローカル/クラウドとも postgres 権限で可能。
+--   ただし現行 GoTrue はメール/パスワード認証に auth.identities（provider='email'）を
+--   必須とするため、STEP 1.5 で identity 行も併せて投入している。
+--   これが無いと auth.users は存在してもログインできない（「認証情報が正しくない」）。
+--   これは開発用シードのため、本物の顧客データが入った DB には流さないこと。
 -- ============================================================
 
 do $seed$
@@ -102,6 +103,9 @@ declare
   cp11 uuid := '6c000011-0000-0000-0000-000000000000'; -- co2 ORIGINAL  usr2（週替わりテーマ:ショートカット）
   cp12 uuid := '6c000012-0000-0000-0000-000000000000'; -- co2 ORIGINAL  adm2（お知らせ）
   cp13 uuid := '6c000013-0000-0000-0000-000000000000'; -- co2 REPOST    usr2（cp12をリポスト）
+  -- 通知ベル検証用: adm1 → 田中太郎(usr1) をメンションする co1 投稿
+  cpm1 uuid := '6c0000a1-0000-0000-0000-000000000000'; -- co1 ORIGINAL adm1（@田中 太郎 メンション）
+  cpm2 uuid := '6c0000a2-0000-0000-0000-000000000000'; -- co1 ORIGINAL adm1（@田中 太郎 メンション）
 
   -- ===== 社内SNS: community_post_tags UUID =====
   tag1 uuid := '6f000001-0000-0000-0000-000000000000'; -- 業務効率化
@@ -232,6 +236,34 @@ begin
     raw_app_meta_data = excluded.raw_app_meta_data,
     raw_user_meta_data = excluded.raw_user_meta_data,
     updated_at = now();
+
+  -- ==========================================================
+  -- STEP 1.5: auth.identities を作成（メール/パスワード認証に必須）
+  --   現行 GoTrue は auth.users だけではログインできず、
+  --   provider='email' の identity 行が無いと「認証情報が正しくない」で弾かれる。
+  --   （直接 auth.users INSERT だけでは identity が作られないため明示的に補う）
+  --   unique (provider_id, provider) で冪等。既存 identity には触れない。
+  -- ==========================================================
+
+  insert into auth.identities
+    (provider_id, user_id, identity_data, provider, last_sign_in_at, created_at, updated_at)
+  select
+    u.id::text,
+    u.id,
+    jsonb_build_object(
+      'sub', u.id::text,
+      'email', u.email,
+      'email_verified', true,
+      'phone_verified', false
+    ),
+    'email',
+    now(), now(), now()
+  from auth.users u
+  where u.id in (mstr, adm1, adm2, adm3, usr1, usr2, usr3, usr4, usr5)
+    and not exists (
+      select 1 from auth.identities i
+      where i.user_id = u.id and i.provider = 'email'
+    );
 
   -- ==========================================================
   -- STEP 2: public.users を明示 UPSERT（トリガー未発火の保険）
@@ -1435,6 +1467,56 @@ begin
       true,
       now() - interval '10 minutes',
       now() - interval '1 hour'
+    ),
+    -- ===== 通知ベル検証用: 田中太郎(usr1) 宛ての各種通知 =====
+    -- MENTION 2件は community_post_mentions のトリガーで別途自動生成される。
+    (
+      'f2000004-0000-0000-0000-000000000000',
+      usr1,
+      'MESSAGE_RECEIVED',
+      '応募先から返信が届いています',
+      '「経費精算レシートの整理・データ入力サポート」への問い合わせに返信がありました。',
+      'application',
+      'dd000006-0000-0000-0000-000000000000',
+      false,
+      null,
+      now() - interval '45 minutes'
+    ),
+    (
+      'f2000005-0000-0000-0000-000000000000',
+      usr1,
+      'APPLICATION_STATUS_CHANGED',
+      '応募が確認中になりました',
+      '応募ステータスが REVIEWING に更新されました。',
+      'application',
+      'dd000011-0000-0000-0000-000000000000',
+      false,
+      null,
+      now() - interval '4 hours'
+    ),
+    (
+      'f2000006-0000-0000-0000-000000000000',
+      usr1,
+      'ANNOUNCEMENT',
+      'システムメンテナンスのお知らせ',
+      '今週末の深夜にメンテナンスを実施します。詳細はお知らせ欄をご確認ください。',
+      null,
+      null,
+      true,
+      now() - interval '1 day',
+      now() - interval '1 day 2 hours'
+    ),
+    (
+      'f2000007-0000-0000-0000-000000000000',
+      usr1,
+      'POINT_GRANTED',
+      'ポイントが付与されました',
+      '案件協力の御礼として 500pt が付与されました。',
+      null,
+      null,
+      true,
+      now() - interval '2 days',
+      now() - interval '2 days'
     )
   on conflict (id) do update set
     user_id = excluded.user_id,
@@ -1587,6 +1669,37 @@ begin
     source_kind = excluded.source_kind,
     weekly_theme_id = excluded.weekly_theme_id,
     created_at = excluded.created_at;
+
+  -- ---- 8-2b. 通知ベル検証用: adm1 が田中太郎(usr1)をメンションする投稿 ----
+  -- 本番同様、community_post_mentions への挿入で community_notify_mention
+  -- トリガーが MENTION 通知を自動生成する（→ ベルに出て、タップで /app/community
+  -- ?highlight=<post> にてフィード内で該当投稿が強調される）。
+  insert into public.community_posts
+    (id, company_id, author_user_id, body, visibility, post_kind, source_kind, created_at)
+  values
+    (cpm1, co1, adm1,
+     E'@田中 太郎 さん、来週の勉強会の件、資料のたたき台を共有したいので確認お願いできますか？🙏',
+     'COMPANY', 'ORIGINAL', 'INTERNAL', now() - interval '15 minutes'),
+    (cpm2, co1, adm1,
+     E'先日の議事録ツールの話、@田中 太郎 さんの投稿が参考になりました！全社にも共有したいです。',
+     'COMPANY', 'ORIGINAL', 'INTERNAL', now() - interval '3 hours')
+  on conflict (id) do update set
+    company_id = excluded.company_id,
+    author_user_id = excluded.author_user_id,
+    body = excluded.body,
+    visibility = excluded.visibility,
+    post_kind = excluded.post_kind,
+    source_kind = excluded.source_kind,
+    created_at = excluded.created_at;
+
+  -- メンション行（→ トリガーが MENTION 通知を自動生成）。
+  -- on conflict do nothing で再適用時にトリガーを再発火させない（通知の重複防止）。
+  insert into public.community_post_mentions
+    (post_id, mentioned_user_id, mentioned_display_name)
+  values
+    (cpm1, usr1, '田中 太郎'),
+    (cpm2, usr1, '田中 太郎')
+  on conflict (post_id, mentioned_user_id) do nothing;
 
   -- ---- 8-3. 社外SNS取込（external_drafts → EXTERNAL_IMPORT 投稿） ----
 

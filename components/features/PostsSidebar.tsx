@@ -35,12 +35,6 @@ const RECOMMENDED: RecommendedItem[] = [
   },
 ];
 
-const POPULAR_ISSUES = [
-  { rank: 1, title: "PCの動作が重い時の対処法", views: 450, comments: 12 },
-  { rank: 2, title: "新しい福利厚生のアイデア", views: 320, comments: 45 },
-  { rank: 3, title: "ランチのおすすめスポット", views: 280, comments: 18 },
-];
-
 const POPULAR_TAGS = [
   "#業務改善",
   "#DX",
@@ -125,32 +119,7 @@ export function PostsSidebar() {
         </div>
       </section>
 
-      <section className="bg-white p-6 rounded-xl border border-default-200">
-        <h2 className="font-bold text-default-800 mb-4">
-          人気困りごとランキング
-        </h2>
-        <div className="space-y-4">
-          {POPULAR_ISSUES.map((p) => (
-            <div key={p.rank} className="flex gap-3">
-              <span
-                className={`text-lg font-bold ${
-                  p.rank === 1 ? "text-primary" : "text-default-400"
-                }`}
-              >
-                {p.rank}
-              </span>
-              <div className="min-w-0">
-                <p className="text-sm font-bold text-default-800 line-clamp-1">
-                  {p.title}
-                </p>
-                <p className="text-xs text-default-400">
-                  👁 {p.views} 💬 {p.comments}
-                </p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
+      {/* 人気困りごとランキング: 困りごと機能は未実装のため非表示（実装後に復帰） */}
 
       <section className="bg-white p-6 rounded-xl border border-default-200">
         <h2 className="font-bold text-default-800 mb-4">人気タグ</h2>

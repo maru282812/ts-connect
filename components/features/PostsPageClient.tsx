@@ -97,6 +97,7 @@ export function PostsPageClient({
   const [applicationsByPostId, setApplicationsByPostId] = useState<
     Map<string, Set<ApplicationType>>
   >(new Map());
+  const [likedPostIds, setLikedPostIds] = useState<Set<string>>(new Set());
 
   const initialPostId = useRef(searchParams.get("post"));
   useEffect(() => {
@@ -148,11 +149,18 @@ export function PostsPageClient({
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) return;
-      const { data: apps } = await supabase
-        .from("applications")
-        .select("post_id, application_type")
-        .eq("applicant_user_id", user.id)
-        .in("post_id", postIds);
+      const [{ data: apps }, { data: reactions }] = await Promise.all([
+        supabase
+          .from("applications")
+          .select("post_id, application_type")
+          .eq("applicant_user_id", user.id)
+          .in("post_id", postIds),
+        supabase
+          .from("post_reactions")
+          .select("post_id")
+          .eq("user_id", user.id)
+          .in("post_id", postIds),
+      ]);
       if (apps) {
         const map = new Map<string, Set<ApplicationType>>();
         for (const app of apps) {
@@ -160,6 +168,9 @@ export function PostsPageClient({
           map.get(app.post_id)?.add(app.application_type as ApplicationType);
         }
         setApplicationsByPostId(map);
+      }
+      if (reactions) {
+        setLikedPostIds(new Set(reactions.map((r) => r.post_id)));
       }
     };
 
@@ -177,6 +188,51 @@ export function PostsPageClient({
       });
     },
     [],
+  );
+
+  const handleToggleLike = useCallback(
+    async (postId: string) => {
+      const wasLiked = likedPostIds.has(postId);
+      const delta = wasLiked ? -1 : 1;
+
+      // 楽観的更新: いいね状態・カウントを即座に反映
+      setLikedPostIds((prev) => {
+        const next = new Set(prev);
+        if (wasLiked) next.delete(postId);
+        else next.add(postId);
+        return next;
+      });
+      setPosts((prev) =>
+        prev.map((p) =>
+          p.id === postId
+            ? { ...p, like_count: Math.max(0, (p.like_count ?? 0) + delta) }
+            : p,
+        ),
+      );
+
+      try {
+        const res = await fetch(`/api/posts/${postId}/like`, {
+          method: wasLiked ? "DELETE" : "POST",
+        });
+        if (!res.ok) throw new Error("like request failed");
+      } catch {
+        // 失敗時はロールバック
+        setLikedPostIds((prev) => {
+          const next = new Set(prev);
+          if (wasLiked) next.add(postId);
+          else next.delete(postId);
+          return next;
+        });
+        setPosts((prev) =>
+          prev.map((p) =>
+            p.id === postId
+              ? { ...p, like_count: Math.max(0, (p.like_count ?? 0) - delta) }
+              : p,
+          ),
+        );
+      }
+    },
+    [likedPostIds],
   );
 
   useEffect(() => {
@@ -373,6 +429,8 @@ export function PostsPageClient({
                       isSelected={post.id === selectedPostId}
                       onClick={() => handleSelectPost(post)}
                       appliedTypes={applicationsByPostId.get(post.id)}
+                      isLiked={likedPostIds.has(post.id)}
+                      onToggleLike={() => handleToggleLike(post.id)}
                     />
                   ))}
                 </div>

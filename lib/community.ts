@@ -68,6 +68,7 @@ export interface FeedPost {
   mentionsMe: boolean;
   poll: FeedPoll | null;
   createdAtLabel: string;
+  createdAt: string;
   liked: boolean;
   likeCount: number;
   commentCount: number;
@@ -143,19 +144,28 @@ async function resolveDisplayNames(
 }
 
 // ── フィード取得（投稿 + 著者 + 自分のリアクション + 引用元） ──
-export async function fetchFeed(): Promise<FeedPost[]> {
+export async function fetchFeed(options?: {
+  since?: Date;
+  limit?: number;
+}): Promise<FeedPost[]> {
   const supabase = createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const { data: rows } = await supabase
+  let query = supabase
     .from("community_posts")
     .select("*")
     .is("deleted_at", null)
     .eq("is_draft", false)
-    .order("created_at", { ascending: false })
-    .limit(50);
+    .order("created_at", { ascending: false });
+  // since 指定時は期間で母集団を取る（未指定なら従来どおり最新 limit 件）
+  if (options?.since) {
+    query = query.gte("created_at", options.since.toISOString());
+  }
+  query = query.limit(options?.limit ?? 50);
+
+  const { data: rows } = await query;
 
   const posts = (rows as CommunityPostRow[]) ?? [];
   if (posts.length === 0) return [];
@@ -356,6 +366,7 @@ export async function fetchFeed(): Promise<FeedPost[]> {
       mentionsMe: user ? mentions.some((m) => m.id === user.id) : false,
       poll: pollByPost.get(p.id) ?? null,
       createdAtLabel: formatRelativeTime(p.created_at),
+      createdAt: p.created_at,
       liked: like?.reacted ?? false,
       likeCount: like?.count ?? 0,
       commentCount: p.comment_count,

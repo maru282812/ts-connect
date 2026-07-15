@@ -81,7 +81,31 @@ export function HomeClient() {
       if (!alive) return;
       setActiveTheme(getActiveTheme(themes));
     });
-    fetchFeed().then((posts) => alive && setRecentPosts(posts.slice(0, 3)));
+    // 直近2週間の投稿を母集団に、いいね数の多い順で上位3件（同数なら新しい順）。
+    // 2週間で3件に満たなければ、全期間から新しい順で3件になるまで補充する。
+    (async () => {
+      const since = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
+      const recent = await fetchFeed({ since, limit: 200 });
+      const ranked = [...recent]
+        .sort(
+          (a, b) =>
+            b.likeCount - a.likeCount ||
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+        )
+        .slice(0, 3);
+      if (ranked.length < 3) {
+        // fetchFeed は新しい順で返る。既出を除いて 3 件まで補充。
+        const all = await fetchFeed({ limit: 50 });
+        const seen = new Set(ranked.map((p) => p.id));
+        for (const p of all) {
+          if (ranked.length >= 3) break;
+          if (seen.has(p.id)) continue;
+          ranked.push(p);
+          seen.add(p.id);
+        }
+      }
+      if (alive) setRecentPosts(ranked);
+    })();
 
     return () => {
       alive = false;
