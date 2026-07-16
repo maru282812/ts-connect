@@ -209,9 +209,16 @@ export function NewsletterForm({ issue }: NewsletterFormProps) {
                 value={body}
                 onValueChange={setBody}
                 isRequired
-                placeholder="社内報の本文を入力してください"
+                placeholder={
+                  "社内報の本文を入力してください\n\nURL（https://…）はそのまま貼るとリンクになります。\n表示名を付けたいときは [表示名](https://…) の形式で入力できます。"
+                }
                 minRows={8}
               />
+              <p className="mt-1.5 text-xs text-slate-400">
+                本文に URL を貼ると自動でリンクになります。「
+                <span className="font-mono">[表示名](https://…)</span>
+                」の形式で表示名を付けることもできます。
+              </p>
             </FormField>
 
             <FormField label="その他写真（複数可）">

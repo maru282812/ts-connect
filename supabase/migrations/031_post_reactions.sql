@@ -26,25 +26,18 @@ create index if not exists post_reactions_post_idx on public.post_reactions(post
 create index if not exists post_reactions_user_idx on public.post_reactions(user_id);
 
 -- ── Step 3: トリガー関数：post_reactions から like_count を同期 ──
+--   SECURITY DEFINER + search_path 固定で RLS をバイパスして正確に数える。
 create or replace function public.post_sync_like_count()
 returns trigger as $$
 begin
-  if tg_op = 'DELETE' then
-    update public.posts
-      set like_count = coalesce((
-        select count(*) from public.post_reactions where post_id = old.post_id
-      ), 0)
-    where id = old.post_id;
-    return old;
-  else -- INSERT
-    update public.posts
-      set like_count = coalesce((
-        select count(*) from public.post_reactions where post_id = new.post_id
-      ), 0)
-    where id = new.post_id;
-    return new;
-  end if;
-end $$ language plpgsql;
+  update public.posts p
+     set like_count = (
+       select count(*) from public.post_reactions r where r.post_id = p.id
+     )
+   where p.id = coalesce(new.post_id, old.post_id);
+  return coalesce(new, old);
+end;
+$$ language plpgsql security definer set search_path = public;
 
 -- ── Step 4: トリガーを作成・再作成 ──
 drop trigger if exists trg_post_like_count on public.post_reactions;
@@ -77,3 +70,9 @@ drop policy if exists "post_reactions_delete_admin" on public.post_reactions;
 create policy "post_reactions_delete_admin"
   on public.post_reactions for delete
   using (auth.role() = 'service_role');
+
+-- ── Step 6: GRANT ──
+-- GRANT が無いと RLS に到達する前に "permission denied for table" で 500 になる。
+-- （これが未付与だったため、いいね API が常に失敗していた）
+grant all on public.post_reactions to service_role;
+grant select, insert, delete on public.post_reactions to authenticated;

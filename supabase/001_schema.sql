@@ -133,6 +133,7 @@ create table if not exists public.posts (
   deleted_at                   timestamptz,
   view_count                   int         not null default 0,
   application_count            int         not null default 0,
+  like_count                   int         not null default 0,
   created_at                   timestamptz not null default now(),
   updated_at                   timestamptz not null default now()
 );
@@ -145,6 +146,55 @@ create index if not exists posts_featured_idx     on public.posts(is_featured) w
 create index if not exists posts_recommended_idx  on public.posts(is_recommended) where is_recommended = true;
 create index if not exists posts_deleted_at_idx   on public.posts(deleted_at) where deleted_at is null;
 create index if not exists posts_search_idx       on public.posts using gin(to_tsvector('simple', title || ' ' || body));
+
+-- ── post_reactions（案件へのいいね） ─────────────────────────
+--   community_post_reactions をモデルにした posts 用のいいねテーブル。
+--   posts.like_count はトリガーで自動同期する（手動更新しない）。
+--   自己完結ブロック: テーブル / index / トリガー / RLS / GRANT をここに集約する。
+create table if not exists public.post_reactions (
+  id         uuid        primary key default gen_random_uuid(),
+  post_id    uuid        not null references public.posts(id) on delete cascade,
+  user_id    uuid        not null references public.users(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  unique (post_id, user_id)
+);
+create index if not exists post_reactions_post_idx on public.post_reactions(post_id);
+create index if not exists post_reactions_user_idx on public.post_reactions(user_id);
+
+-- like_count 同期トリガー（SECURITY DEFINER で RLS をバイパスして正確に数える）
+create or replace function public.post_sync_like_count()
+returns trigger as $$
+begin
+  update public.posts p
+     set like_count = (
+       select count(*) from public.post_reactions r where r.post_id = p.id
+     )
+   where p.id = coalesce(new.post_id, old.post_id);
+  return coalesce(new, old);
+end;
+$$ language plpgsql security definer set search_path = public;
+
+drop trigger if exists trg_post_like_count on public.post_reactions;
+create trigger trg_post_like_count
+  after insert or delete on public.post_reactions
+  for each row execute function public.post_sync_like_count();
+
+-- RLS: 参照は全員 / 追加・削除は本人のみ
+alter table public.post_reactions enable row level security;
+
+drop policy if exists "post_reactions: select" on public.post_reactions;
+create policy "post_reactions: select" on public.post_reactions
+  for select using (true);
+drop policy if exists "post_reactions: insert own" on public.post_reactions;
+create policy "post_reactions: insert own" on public.post_reactions
+  for insert with check (user_id = auth.uid());
+drop policy if exists "post_reactions: delete own" on public.post_reactions;
+create policy "post_reactions: delete own" on public.post_reactions
+  for delete using (user_id = auth.uid());
+
+-- GRANT: 無いと RLS 到達前に "permission denied for table" で弾かれる
+grant all on public.post_reactions to service_role;
+grant select, insert, delete on public.post_reactions to authenticated;
 
 -- ── applications ───────────────────────────────────────────
 create table if not exists public.applications (
@@ -4513,6 +4563,31 @@ grant all on public.newsletter_issues    to service_role;
 grant all on public.newsletter_view_logs to service_role;
 grant select, insert, update, delete on public.newsletter_issues to authenticated;
 grant select on public.newsletter_view_logs to authenticated;
+
+-- ── 社内報 初期記事（HDニュース転載・全社共通・冪等） ──
+-- 出典: T's agency holdings コーポレートサイト NEWS（原文 掲載日 2024-03-09 に合わせる）。
+-- company_id = NULL は全社共通（全社員に表示）。created_by は基盤データのため NULL。
+-- cover_image_url は出典サイトのメイン写真 URL（about-message-main.jpg）を直接参照。
+insert into public.newsletter_issues
+  (company_id, title, category, summary, body, cover_image_url,
+   status, published_at, is_pickup, view_count, created_by)
+select
+  null,
+  '代表取締役の鎌田達己が、情報経営イノベーション専門職大学の客員准教授に就任いたしました',
+  'NOTICE',
+  '当グループ代表取締役の鎌田達己が、情報経営イノベーション専門職大学の客員准教授に就任しました。',
+  E'代表取締役の鎌田達己が、情報経営イノベーション専門職大学の客員准教授に就任いたしました。\n\n' ||
+  E'（T''s agency holdings コーポレートサイト NEWS より）',
+  'https://www.tsagency.co.jp/wp-content/uploads/2024/03/about-message-main.jpg',
+  'PUBLISHED',
+  '2024-03-09T00:00:00+09:00',
+  false,
+  0,
+  null
+where not exists (
+  select 1 from public.newsletter_issues
+  where title = '代表取締役の鎌田達己が、情報経営イノベーション専門職大学の客員准教授に就任いたしました'
+);
 
 -- ============================================================
 -- 17. フェーズ2: 社員検索 / 案件オススメ

@@ -2,6 +2,7 @@
 
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { LinkedText } from "@/components/ui/LinkedText";
 import {
   fetchIssue,
   NEWSLETTER_CATEGORY_LABEL,
@@ -72,7 +73,7 @@ export function NewsletterArticleClient() {
           <img
             src={issue.coverImageUrl}
             alt={issue.title}
-            className="w-full h-56 object-cover"
+            className="w-full h-64 object-contain bg-default-100"
           />
         )}
         <div className="p-6 sm:p-8">
@@ -94,7 +95,7 @@ export function NewsletterArticleClient() {
             </p>
           )}
           <div className="text-default-700 whitespace-pre-wrap leading-relaxed">
-            {issue.body}
+            <LinkedText text={issue.body} />
           </div>
           {issue.imageUrls.length > 0 && (
             <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -104,7 +105,7 @@ export function NewsletterArticleClient() {
                   key={url}
                   src={url}
                   alt=""
-                  className="w-full rounded-lg object-cover"
+                  className="w-full h-48 rounded-lg object-cover bg-default-100"
                 />
               ))}
             </div>

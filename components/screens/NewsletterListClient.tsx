@@ -97,7 +97,14 @@ function formatDate(iso: string | null): string {
   ).padStart(2, "0")}`;
 }
 
-export function NewsletterListClient() {
+interface NewsletterListClientProps {
+  /** 記事詳細リンクのベースパス。user 面は /app/newsletter、admin 面は /company/newsletter-feed。 */
+  basePath?: string;
+}
+
+export function NewsletterListClient({
+  basePath = "/app/newsletter",
+}: NewsletterListClientProps = {}) {
   const [issues, setIssues] = useState<NewsletterIssue[] | null>(null);
   const [filter, setFilter] = useState<CategoryFilter>("ALL");
 
@@ -166,7 +173,7 @@ export function NewsletterListClient() {
           {visible.map((issue) => (
             <Link
               key={issue.id}
-              href={`/app/newsletter/${issue.id}`}
+              href={`${basePath}/${issue.id}`}
               className="group overflow-hidden rounded-xl border border-default-200 bg-white transition-shadow hover:shadow-md"
             >
               <div className="relative h-32 bg-gradient-to-br from-primary-100 to-default-100">
